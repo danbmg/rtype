@@ -12,7 +12,7 @@ the summary; the three detailed studies give the full comparison for their area:
 
 | Need | Choice | Alternatives considered | Why this one | Details |
 | --- | --- | --- | --- | --- |
-| Language | **C++20** | C++17 | C++ is required by the subject. C++20 adds what the code relies on: `std::span` to pass datagrams without copies, `std::bit_cast` to serialize floats without undefined behaviour, `contains()` on maps | — |
+| Language | **C++20** | Rust, Python, C# | C++ is required by the subject. It also fits a real-time game: no garbage collector pausing a tick, direct control of memory layout (plain-data components, byte-exact packets), and SFML and Asio are native C++ libraries. Python is too slow for a 60 ticks/s loop; Rust would be a good fit but the subject requires C++. We use C++20 rather than an older standard for `std::span` (pass datagrams without copies), `std::bit_cast` (serialize floats without undefined behaviour) and `contains()` on maps | — |
 | Build system | **CMake ≥ 3.21** | Meson, plain Make | Required to build on Linux and Windows; one target per module enforces the dependency rule; every IDE reads it | [study](architecture-study.md#build-system) |
 | Package manager | **CPM.cmake** | Conan, vcpkg | A single CMake script, no extra tool to install; dependencies are built from source at exact versions; nothing vendored in the repository | [study](architecture-study.md#dependency-management) |
 | Game architecture | **ECS with sparse arrays** | class hierarchy, archetype ECS | Ships, Bydos and missiles mix properties freely; plain data is easy to test and to send over the network; sparse arrays are small enough to explain line by line | [study](architecture-study.md#ecs-data-organization) |
