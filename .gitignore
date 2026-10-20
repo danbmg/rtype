@@ -25,4 +25,11 @@ nanotekspice
 Nts/file/
 rom.bin
 G-OOP-400_nanotekspice/
-rtypes-sprites/
+/build*/
+.cpm-cache/
+.cache/
+*.o
+*.a
+*.so
+*.dylib
+*.log
