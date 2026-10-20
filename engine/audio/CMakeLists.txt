@@ -1,0 +1,8 @@
+if(NOT RTYPE_BUILD_CLIENT)
+  return()
+endif()
+add_library(engine-audio STATIC SFMLAudio.cpp)
+add_library(engine::audio ALIAS engine-audio)
+target_include_directories(engine-audio PUBLIC ${ENGINE_INCLUDE_ROOT})
+target_link_libraries(engine-audio PUBLIC SFML::Audio)
+rtype_set_warnings(engine-audio)

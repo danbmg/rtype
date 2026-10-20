@@ -1,0 +1,5 @@
+add_library(rtype-protocol STATIC PacketCodec.cpp)
+add_library(rtype::protocol ALIAS rtype-protocol)
+target_include_directories(rtype-protocol PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(rtype-protocol PUBLIC engine::network)
+rtype_set_warnings(rtype-protocol)

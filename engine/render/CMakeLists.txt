@@ -1,0 +1,8 @@
+if(NOT RTYPE_BUILD_CLIENT)
+  return()
+endif()
+add_library(engine-render STATIC SFMLRenderer.cpp)
+add_library(engine::render ALIAS engine-render)
+target_include_directories(engine-render PUBLIC ${ENGINE_INCLUDE_ROOT})
+target_link_libraries(engine-render PUBLIC SFML::Graphics)
+rtype_set_warnings(engine-render)
