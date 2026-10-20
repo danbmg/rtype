@@ -1,0 +1,46 @@
+site_name: R-Type
+site_description: A networked R-Type built on our own C++20 game engine
+repo_url: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Engine and gameplay: matraphlu-engine.md
+      - Network and server: network.md
+  - Protocol RFC: protocol/rfc.md
+  - Tutorials:
+      - Headless Pong: pong-tutorial.md
+  - Comparative studies:
+      - Architecture and tooling: architecture-study.md
+      - Networking, storage and security: network-study.md

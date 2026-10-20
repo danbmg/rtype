@@ -1,0 +1,29 @@
+# Each path is reviewed by its owner (CLAUDE.md section 3). Shared contracts need everyone.
+# The last matching line wins.
+
+/CMakeLists.txt           @matraphlu
+/.clang-format            @matraphlu
+/.clang-tidy              @matraphlu
+/engine/core/             @matraphlu
+/engine/ecs/              @matraphlu
+/engine/examples/         @matraphlu
+/common/components/       @matraphlu @theodsh @danbmg
+/game/                    @matraphlu @theodsh
+/tests/engine/            @matraphlu
+/tests/game/              @matraphlu @theodsh
+
+/engine/render/           @theodsh
+/engine/audio/            @theodsh
+/engine/input/            @theodsh
+/client/                  @theodsh
+/assets/                  @theodsh
+
+/engine/network/          @danbmg
+/common/protocol/         @danbmg @theodsh @matraphlu
+/server/                  @danbmg
+/client/net/              @danbmg
+/tests/network/           @danbmg
+/tests/server/            @danbmg
+/.github/                 @danbmg
+/mkdocs.yml               @danbmg
+/docs/protocol/           @danbmg

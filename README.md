@@ -58,6 +58,17 @@ cmake -S engine -B build-engine -G Ninja
 cmake --build build-engine
 ```
 
+## Usage
+
+```sh
+./r-type_server -p 4242                      # authoritative game server (UDP)
+./r-type_client -h 127.0.0.1 -p 4242         # graphical client
+./build/bin/r-type_bot -p 4242 -n 4 -d 30    # 4 headless test players for 30 seconds
+```
+
+The network protocol is specified in [docs/protocol/rfc.md](docs/protocol/rfc.md); the server
+and network layer are described in [docs/network.md](docs/network.md).
+
 ## Architecture
 
 ```mermaid
