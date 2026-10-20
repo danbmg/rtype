@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <random>
 
 #include "common/components/Components.hpp"
@@ -14,26 +15,44 @@ struct WorldBounds {
   float height = 600.0F;
 };
 
+// Timing of the Bydos waves, in seconds. Shots are aimed at a random player.
+struct EnemyWaveSettings {
+  float spawnIntervalSeconds = 1.2F;
+  float fireChancePerSecond = 0.25F;
+  float shotSpeed = 220.0F;
+};
+
+// Distance an entity may travel past the screen edge before it is destroyed.
+constexpr float OFFSCREEN_MARGIN = 64.0F;
+
 void registerSystems(engine::ecs::Registry& registry);
-void registerGameplaySystems(
-    engine::core::SystemScheduler<engine::ecs::Registry>& scheduler, float deltaSeconds,
-    WorldBounds bounds = {});
+void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,
+                             float deltaSeconds, WorldBounds bounds = {});
+void registerEnemySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,
+                          float deltaSeconds, std::uint32_t seed, WorldBounds bounds = {},
+                          EnemyWaveSettings settings = {});
 void applyPlayerInput(engine::ecs::Registry& registry, engine::ecs::Entity player, float horizontal,
                       float vertical, float speed);
 void updateMovement(engine::ecs::Registry& registry, float deltaSeconds);
 void updatePlayerMovement(engine::ecs::Registry& registry, float deltaSeconds = 1.0F);
 void keepEntitiesOnScreen(engine::ecs::Registry& registry, WorldBounds bounds = {});
 
-engine::ecs::Entity spawnEnemy(engine::ecs::Registry& registry, float x, float y,
-                               float velocityX, float velocityY, int health = 1);
+engine::ecs::Entity spawnEnemy(engine::ecs::Registry& registry, float x, float y, float velocityX,
+                               float velocityY, int health = 1);
 engine::ecs::Entity spawnRandomEnemy(engine::ecs::Registry& registry, std::mt19937& random,
                                      WorldBounds bounds = {});
 engine::ecs::Entity fireProjectile(engine::ecs::Registry& registry, engine::ecs::Entity shooter,
-                                   bool friendly, int ownerId, float velocityX, float velocityY,
-                                   int damage = 1);
+                                   bool friendly, std::int32_t ownerId, float velocityX,
+                                   float velocityY, int damage = 1);
+engine::ecs::Entity firePlayerProjectile(engine::ecs::Registry& registry,
+                                         engine::ecs::Entity player, float speed, int damage = 1);
 engine::ecs::Entity fireEnemyProjectile(engine::ecs::Registry& registry, engine::ecs::Entity enemy,
                                         engine::ecs::Entity target, float speed, int damage = 1);
 std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry);
+std::size_t resolveShipCollisions(engine::ecs::Registry& registry);
+std::size_t handlePlayerDeaths(engine::ecs::Registry& registry);
+std::size_t removeOffscreenEntities(engine::ecs::Registry& registry, WorldBounds bounds = {},
+                                    float margin = OFFSCREEN_MARGIN);
 std::size_t removeDeadEntities(engine::ecs::Registry& registry);
 
 } // namespace game

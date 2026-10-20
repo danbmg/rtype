@@ -1,7 +1,9 @@
 #include <chrono>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <catch2/catch_approx.hpp>
@@ -10,6 +12,7 @@
 #include "engine/core/Clock.hpp"
 #include "engine/core/DeveloperConsole.hpp"
 #include "engine/core/EventBus.hpp"
+#include "engine/core/Logger.hpp"
 #include "engine/core/Metrics.hpp"
 #include "engine/core/ResourceManager.hpp"
 #include "engine/core/SystemScheduler.hpp"
@@ -49,8 +52,7 @@ TEST_CASE("Fixed timestep consumes only complete ticks", "[core][clock]") {
 TEST_CASE("Fixed timestep rejects invalid durations and deltas", "[core][clock][invalid-input]") {
   CHECK_THROWS_AS(engine::core::FixedTimestep(std::chrono::nanoseconds::zero()),
                   std::invalid_argument);
-  CHECK_THROWS_AS(engine::core::FixedTimestep(std::chrono::nanoseconds(-1)),
-                  std::invalid_argument);
+  CHECK_THROWS_AS(engine::core::FixedTimestep(std::chrono::nanoseconds(-1)), std::invalid_argument);
 
   engine::core::FixedTimestep timestep;
   CHECK_THROWS_AS(timestep.advance(std::chrono::nanoseconds(-1)), std::invalid_argument);
@@ -116,14 +118,14 @@ TEST_CASE("Resource manager caches, retrieves, and unloads typed resources", "[c
   CHECK(loadCount == 4);
 }
 
-TEST_CASE("Resource manager reports invalid ids and missing loaders", "[core][resources][invalid-input]") {
+TEST_CASE("Resource manager reports invalid ids and missing loaders",
+          "[core][resources][invalid-input]") {
   engine::core::ResourceManager resources;
   CHECK_THROWS_AS(resources.load<TestResource>("missing"), std::logic_error);
   CHECK_THROWS_AS(resources.load<TestResource>(""), std::invalid_argument);
   CHECK_THROWS_AS(resources.registerLoader<TestResource>({}), std::invalid_argument);
-  resources.registerLoader<TestResource>([](const std::string&) {
-    return std::shared_ptr<TestResource>{};
-  });
+  resources.registerLoader<TestResource>(
+      [](const std::string&) { return std::shared_ptr<TestResource>{}; });
   CHECK_THROWS_AS(resources.load<TestResource>("empty"), std::runtime_error);
 }
 
@@ -165,9 +167,8 @@ TEST_CASE("Developer console rejects unknown names, invalid values, and duplicat
   console.defineVariable("gravity", 9.8);
   CHECK_THROWS_AS(console.setVariable("gravity", "nan"), std::invalid_argument);
   CHECK_THROWS_AS(console.defineVariable("lives", std::int64_t{4}), std::invalid_argument);
-  CHECK_THROWS_AS(console.registerCommand("echo", [](const std::vector<std::string>&) {
-                    return std::string{};
-                  }),
+  CHECK_THROWS_AS(console.registerCommand(
+                      "echo", [](const std::vector<std::string>&) { return std::string{}; }),
                   std::invalid_argument);
 }
 
@@ -187,4 +188,33 @@ TEST_CASE("Metrics reports frame, entity, CPU, and memory measurements", "[core]
 
   CHECK_THROWS_AS(metrics.recordFrame(-1.0, 0), std::invalid_argument);
   CHECK_THROWS_AS(metrics.setCpuUsagePercent(101.0), std::invalid_argument);
+}
+
+TEST_CASE("Logger filters by level and keeps lines whole across threads", "[core][logger]") {
+  std::ostringstream output;
+  auto* const previous = std::clog.rdbuf(output.rdbuf());
+  engine::core::Logger::setLevel(engine::core::LogLevel::Info);
+
+  engine::core::Logger::debug("hidden");
+  constexpr int THREADS = 4;
+  constexpr int LINES_PER_THREAD = 200;
+  {
+    std::vector<std::jthread> writers;
+    for (int index = 0; index < THREADS; ++index) {
+      writers.emplace_back([] {
+        for (int line = 0; line < LINES_PER_THREAD; ++line) {
+          engine::core::Logger::info("network-and-game-loop");
+        }
+      });
+    }
+  }
+  std::clog.rdbuf(previous);
+
+  std::istringstream lines(output.str());
+  int count = 0;
+  for (std::string line; std::getline(lines, line); ++count) {
+    CHECK(line.ends_with("] INFO network-and-game-loop"));
+  }
+  CHECK(count == THREADS * LINES_PER_THREAD);
+  CHECK(output.str().find("hidden") == std::string::npos);
 }

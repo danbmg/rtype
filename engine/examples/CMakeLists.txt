@@ -1,0 +1,6 @@
+add_executable(engine_pong pong/main.cpp)
+target_link_libraries(engine_pong PRIVATE engine::engine)
+set_target_properties(engine_pong PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+if(NOT MSVC)
+  target_compile_options(engine_pong PRIVATE -Wall -Wextra -Wpedantic)
+endif()

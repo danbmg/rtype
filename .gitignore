@@ -1,36 +1,30 @@
-#Fundamental .gitignore
-
-.vscode/
-*.out
-*.o
-*.a
-*.obj
-*~
-*lo
-*slo
-.vscode
-*.pdf
-*.txt
-learning.md
-.discord.env
-zip/
-.claude/
-*gcno
-*gcda
-.clang-format
-build/
-exit
-CLAUDE.md
-nanotekspice
-Nts/file/
-rom.bin
-G-OOP-400_nanotekspice/
+# Build output
 /build*/
-.cpm-cache/
-rtypes-sprites/
-.cache/
+/r-type_server
+/r-type_client
+*.exe
 *.o
+*.obj
 *.a
+*.lib
 *.so
 *.dylib
+*.gcno
+*.gcda
 *.log
+
+# Dependency caches (CPM_SOURCE_CACHE when it points inside the repo)
+.cpm-cache/
+.cache/
+
+# Editors
+.vscode/
+*~
+
+# Local notes, subject files and raw assets (not part of the deliverable)
+CLAUDE.md
+.claude/
+learning.md
+*.pdf
+.discord.env
+rtypes-sprites/

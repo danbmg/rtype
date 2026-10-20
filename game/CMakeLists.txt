@@ -1,0 +1,5 @@
+add_library(rtype-game STATIC GameSystems.cpp)
+add_library(rtype::game ALIAS rtype-game)
+target_include_directories(rtype-game PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(rtype-game PUBLIC engine::core engine::ecs rtype::components)
+rtype_set_warnings(rtype-game)

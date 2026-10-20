@@ -5,28 +5,48 @@ into independent engine, shared-component, gameplay, client, and server layers.
 
 ## Build requirements
 
-- CMake 3.21 or newer
-- A C++20 compiler
+- CMake 3.21 or newer and a C++20 compiler (GCC 11+, Clang 14+ or MSVC 2022)
 - Ninja on Linux (recommended)
-- CPM.cmake downloads Catch2 when tests are enabled
+- Every third-party library is fetched and pinned by CPM.cmake in the root [CMakeLists.txt](CMakeLists.txt):
+  Asio 1.36.0 (network), SFML 3.0.2 (client only), Catch2 3.8.1 (tests only).
+  Nothing is taken from the system except compilers and low-level platform libraries.
 
-The graphical client and network server are separate team modules. The engine can be configured
-on its own from `engine/`.
+SFML needs these low-level libraries on Linux:
+
+```sh
+# Fedora
+sudo dnf install cmake ninja-build gcc-c++ libX11-devel libXrandr-devel libXcursor-devel \
+  libXi-devel systemd-devel mesa-libGL-devel
+# Ubuntu
+sudo apt install cmake ninja-build g++ libx11-dev libxrandr-dev libxcursor-dev libxi-dev \
+  libudev-dev libgl1-mesa-dev
+```
 
 ## Build and test
 
-Configure, build, and run the tests from the repository root:
+From the repository root (dependencies are downloaded once into `CPM_SOURCE_CACHE`):
 
 ```sh
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRTYPE_BUILD_TESTS=ON
-cmake --build build
+export CPM_SOURCE_CACHE=$HOME/.cache/CPM
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
+
+`r-type_server` and `r-type_client` are written at the repository root. On Windows, drop
+`-G Ninja` and add `--config Release` to the build and test commands.
+
+| CMake option | Default | Effect |
+| --- | --- | --- |
+| `RTYPE_BUILD_TESTS` | `ON` | Builds the Catch2 unit tests |
+| `RTYPE_BUILD_CLIENT` | `ON` | Builds the graphical client; `OFF` builds the server without SFML |
+| `RTYPE_BUILD_EXAMPLES` | `OFF` | Builds the headless Pong engine example |
+| `RTYPE_WARNINGS_AS_ERRORS` | `OFF` | Turns compiler warnings into errors (used by the CI) |
 
 To run the headless Pong engine example:
 
 ```sh
-cmake -S . -B build -G Ninja -DRTYPE_BUILD_EXAMPLES=ON -DRTYPE_BUILD_TESTS=OFF
+cmake -S . -B build -G Ninja -DRTYPE_BUILD_EXAMPLES=ON
 cmake --build build
 ./build/bin/engine_pong
 ```
