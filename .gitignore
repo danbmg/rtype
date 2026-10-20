@@ -27,6 +27,7 @@ rom.bin
 G-OOP-400_nanotekspice/
 /build*/
 .cpm-cache/
+rtypes-sprites/
 .cache/
 *.o
 *.a
