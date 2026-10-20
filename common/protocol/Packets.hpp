@@ -14,6 +14,7 @@ constexpr std::uint16_t MAGIC = 0x5254; // "RT"
 constexpr std::uint8_t VERSION = 1;
 constexpr std::uint16_t DEFAULT_PORT = 4242;
 
+// Tous les échanges suivent ce même en-tête, puis un payload propre au type de paquet.
 constexpr std::size_t HEADER_SIZE = 10;
 // Fits the minimum IPv6 MTU (1280 bytes) with IP and UDP headers: never fragmented.
 constexpr std::size_t MAX_DATAGRAM_SIZE = 1200;
@@ -49,7 +50,7 @@ struct Header {
   std::uint16_t magic = MAGIC;
   std::uint8_t version = VERSION;
   PacketType type = PacketType::Connect;
-  std::uint32_t sequence = 0; // per sender, +1 for every datagram it sends
+  std::uint32_t sequence = 0; // Numéro par expéditeur pour repérer les entrées UDP reçues dans le désordre.
   std::uint16_t payloadSize = 0;
 };
 

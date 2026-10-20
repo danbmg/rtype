@@ -98,3 +98,19 @@ sampling; the graphical metrics overlay is owned by the client module.
 - Matteo (`matraphlu`): architecture and engine
 - `theodsh`: graphical client
 - `danbmg`: network and server
+
+## License
+
+Educational project made at Epitech. No open-source license has been chosen yet: the source code
+belongs to its authors and may not be reused without their permission.
+
+Third-party components keep their own licenses:
+
+| Component | License |
+| --- | --- |
+| Asio | Boost Software License 1.0 |
+| SFML | zlib/png license |
+| Catch2 | Boost Software License 1.0 |
+| CPM.cmake | MIT |
+| DejaVu Sans font | DejaVu fonts license, see [assets/DejaVu-LICENSE.txt](assets/DejaVu-LICENSE.txt) |
+| R-Type sprite sheets | original game artwork supplied for the project, no license granted, see [assets/README.md](assets/README.md) |

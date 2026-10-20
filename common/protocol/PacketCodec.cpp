@@ -326,6 +326,7 @@ PacketType packetTypeOf(const Payload& payload) {
 }
 
 std::vector<std::uint8_t> encode(std::uint32_t sequence, const Payload& payload) {
+  // Convertit les types C++ en octets selon le contrat réseau commun.
   BinaryWriter writer(HEADER_SIZE + 64);
   writer.writeU16(MAGIC);
   writer.writeU8(VERSION);
@@ -343,6 +344,7 @@ std::vector<std::uint8_t> encode(std::uint32_t sequence, const Payload& payload)
 }
 
 DecodeResult decode(std::span<const std::uint8_t> datagram) {
+  // Valide le datagram avant de construire un payload utilisable par le client ou le serveur.
   if (datagram.size() < HEADER_SIZE) {
     return fail(DecodeError::TooShort);
   }

@@ -135,7 +135,7 @@ For the manual demo:
 
 Read `main.cpp`, `Scene.cpp`, then the three engine implementations for the shortest code tour.
 Explain the data flow and ownership before discussing SFML calls.
-See also the [graphics/audio study](client-study.md) and [asset provenance](../assets/README.md).
+See also the [graphics/audio study](client-study.md) and [asset provenance](https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/assets/README.md).
 
 ### Local validation recorded on 2026-10-20
 

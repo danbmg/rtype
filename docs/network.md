@@ -84,7 +84,7 @@ Then, in the client loop:
 #include "client/net/NetworkClient.hpp"
 
 client::net::NetworkClient network;
-network.connect(host, port); // from the connection menu; never blocks
+network.connect(host, port); // from the command line (-h, -p); never blocks
 
 while (window.isOpen()) {
   network.update(); // once per frame: applies what the server sent
@@ -154,6 +154,10 @@ ctest --test-dir build --output-on-failure       # unit and integration tests
 `r-type_bot` connects up to 8 bots (more than 4 shows the REJECT), flies them at random, fires,
 and prints once per second what each one sees: entity count, ping, lives and score.
 
+The ping includes up to one tick of waiting on the server side: PONG is sent by the game loop
+when it drains the queue, not by the network thread. On loopback the bot therefore shows about
+16 ms instead of nearly 0, and measurements under `netem` carry the same offset.
+
 To test under bad network conditions (Linux, loopback):
 
 ```sh
@@ -161,3 +165,33 @@ sudo tc qdisc add dev lo root netem loss 2% delay 150ms
 ./build/bin/r-type_bot -n 4 -d 30
 sudo tc qdisc del dev lo root
 ```
+
+## Where the code is
+
+| File | What to look at |
+| --- | --- |
+| [`engine/network/UdpSocket.cpp`][udpsocket] | the only file that uses Asio: receive loop, datagram size check, `asio::post` for sends |
+| [`engine/network/BinaryWriter.hpp`][writer], [`BinaryReader.hpp`][reader] | big-endian, bounds-checked field encoding |
+| [`engine/network/ThreadSafeQueue.hpp`][queue] | the bounded queue between the two threads |
+| [`common/protocol/Packets.hpp`][packets] | the contract: header, packet types, payload layouts, limits |
+| [`common/protocol/PacketCodec.cpp`][codec] | `encode` and `decode`, with every validation rule of RFC section 9 |
+| [`server/Server.cpp`][server] | `onDatagram` (network thread), `gameLoop` and `tick` (game loop thread) |
+| [`server/SessionManager.cpp`][sessions] | the 4 player slots, timeouts |
+| [`server/GameWorld.cpp`][gameworld] | from ECS components to protocol entities, spawn and destroy detection |
+| [`client/net/NetworkClient.cpp`][client] | connection, heartbeat, the client's copy of the world |
+| [`client/net/bot/main.cpp`][bot] | the headless test client |
+| [`tests/network/`][tests-network], [`tests/server/`][tests-server] | codec fuzzing, socket, queue, full server integration |
+
+[udpsocket]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/engine/network/UdpSocket.cpp
+[writer]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/engine/network/BinaryWriter.hpp
+[reader]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/engine/network/BinaryReader.hpp
+[queue]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/engine/network/ThreadSafeQueue.hpp
+[packets]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/common/protocol/Packets.hpp
+[codec]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/common/protocol/PacketCodec.cpp
+[server]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/server/Server.cpp
+[sessions]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/server/SessionManager.cpp
+[gameworld]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/server/GameWorld.cpp
+[client]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/client/net/NetworkClient.cpp
+[bot]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/client/net/bot/main.cpp
+[tests-network]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/tree/main/tests/network
+[tests-server]: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/tree/main/tests/server

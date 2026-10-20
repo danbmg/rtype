@@ -11,6 +11,7 @@ SessionManager::SessionManager(std::uint8_t maxPlayers) : _maxPlayers(maxPlayers
 }
 
 Session* SessionManager::join(const engine::network::Endpoint& endpoint, Clock::time_point now) {
+  // Associe une adresse à un slot joueur et refuse les connexions au-delà du quota.
   if (auto* existing = find(endpoint)) {
     return existing;
   }
@@ -48,6 +49,7 @@ std::optional<Session> SessionManager::remove(const engine::network::Endpoint& e
 
 std::vector<Session> SessionManager::removeTimedOut(Clock::time_point now,
                                                     std::chrono::milliseconds timeout) {
+  // Le timeout libère les slots des clients partis sans envoyer DISCONNECT.
   std::vector<Session> removed;
   for (auto& slot : _slots) {
     if (slot && now - slot->lastSeen > timeout) {

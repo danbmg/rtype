@@ -70,6 +70,7 @@ void GameWorld::removePlayer(std::uint8_t playerId, engine::ecs::Entity ship) {
 }
 
 void GameWorld::applyInput(engine::ecs::Entity ship, std::uint8_t flags) {
+  // Les commandes réseau sont appliquées ici au monde simulé côté serveur.
   if (!_registry.containsEntity(ship)) {
     return;
   }
@@ -118,6 +119,7 @@ void GameWorld::refreshPlayerStates() {
 }
 
 GameWorld::Changes GameWorld::collectChanges() {
+  // Compare les entités au tick précédent pour détecter créations et destructions à diffuser.
   Changes changes;
   std::unordered_map<engine::ecs::Entity, protocol::EntityState> current;
   for (const auto entity : _registry.view<Position>()) {

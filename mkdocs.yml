@@ -1,22 +1,38 @@
 site_name: R-Type
 site_description: A networked R-Type built on our own C++20 game engine
 repo_url: https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2
+repo_name: R-Type on GitHub
+edit_uri: edit/main/docs/
 docs_dir: docs
+exclude_docs: |
+  requirements.txt
 
 theme:
   name: material
+  icon:
+    repo: fontawesome/brands/github
   features:
     - navigation.sections
+    - navigation.footer
     - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
     - content.code.copy
+    - content.action.edit
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
+      primary: indigo
+      accent: cyan
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
+      primary: indigo
+      accent: cyan
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -27,20 +43,38 @@ markdown_extensions:
   - attr_list
   - toc:
       permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 
+# With `mkdocs build --strict` (the CI), every one of these fails the build: a page missing from
+# the menu, a link to a file outside docs/, or a link to a heading that does not exist.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
 nav:
   - Home: index.md
-  - Architecture:
+  - Getting started: getting-started.md
+  - How it works:
+      - Architecture overview: architecture.md
       - Engine and gameplay: matraphlu-engine.md
       - Network and server: network.md
+      - Graphical client: theodsh-client.md
   - Protocol RFC: protocol/rfc.md
+  - Technical choices:
+      - Stack overview: stack.md
+      - Engine, build and dependencies: architecture-study.md
+      - Graphics and audio: client-study.md
+      - Networking, storage and security: network-study.md
+  - Accessibility: accessibility.md
   - Tutorials:
       - Headless Pong: pong-tutorial.md
-  - Comparative studies:
-      - Architecture and tooling: architecture-study.md
-      - Networking, storage and security: network-study.md
+  - Glossary: glossary.md

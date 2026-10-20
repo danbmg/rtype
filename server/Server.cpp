@@ -91,6 +91,7 @@ ServerStats Server::stats() const {
 
 void Server::onDatagram(const engine::network::Endpoint& from,
                         std::span<const std::uint8_t> datagram) {
+  // Le thread réseau valide et met les paquets en file sans toucher au monde de jeu.
   ++_received;
   auto result = protocol::decode(datagram);
   if (!result.packet) {
@@ -146,6 +147,7 @@ void Server::runTick() {
 }
 
 void Server::tick(Clock::time_point now) {
+  // Chaque tick traite les entrées, simule le monde, puis diffuse changements et états.
   _sessions.forEach([](Session& session) { session.packetsThisTick = 0; });
   for (const auto& incoming : _inbound.drain()) {
     handlePacket(incoming, now);
@@ -185,6 +187,7 @@ void Server::handlePacket(const Incoming& incoming, Clock::time_point now) {
   session->lastSeen = now;
 
   if (const auto* input = std::get_if<protocol::Input>(&packet.payload)) {
+    // Le serveur reste autoritaire et ignore les commandes reçues dans le désordre.
     // UDP can reorder: an older INPUT must not overwrite a newer one.
     if (!session->hasInput || isNewer(packet.header.sequence, session->lastInputSequence)) {
       session->inputFlags = input->flags;
@@ -201,6 +204,7 @@ void Server::handlePacket(const Incoming& incoming, Clock::time_point now) {
 }
 
 void Server::handleConnect(const engine::network::Endpoint& from, Clock::time_point now) {
+  // L'adresse UDP identifie la session ; un CONNECT répété ne crée pas un second joueur.
   const bool known = _sessions.find(from) != nullptr;
   auto* session = _sessions.join(from, now);
   if (session == nullptr) {
@@ -236,6 +240,7 @@ void Server::broadcastChanges(const GameWorld::Changes& changes) {
 }
 
 void Server::broadcastSnapshot() {
+  // Les snapshots périodiques resynchronisent les clients après les pertes UDP.
   for (auto& entities : chunk(_world.snapshot(), protocol::MAX_UPDATES_PER_PACKET)) {
     broadcast(protocol::EntityUpdate{_world.tick(), std::move(entities)});
   }

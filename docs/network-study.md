@@ -119,3 +119,25 @@ are untrusted: a player may run a modified client. The network may lose, duplica
 
 These gaps are acceptable for a LAN prototype and are listed in the RFC's security section so
 that a public deployment does not inherit them unknowingly.
+
+### Weak points of each technology
+
+| Technology | Typical weakness | How we handle it |
+| --- | --- | --- |
+| C++ | no memory safety: reading past a buffer, integer overflow on a size, use after free | `BinaryReader` checks every read against the datagram end; sizes are checked before any allocation; buffers are owned by RAII types, no raw `new` |
+| UDP | no connection, so source addresses can be forged; no confidentiality; can be used to amplify traffic towards a victim | only CONNECT is accepted from an unknown address, and a stranger only ever gets ACCEPT or REJECT back; a forged CONNECT can still make the server stream to a victim for 3 s, and there is no encryption: both are listed above as known gaps |
+| Asio | the library is safe, the danger is in the handlers we write: buffer lifetime, errors ignored, two threads using one socket | one fixed receive buffer owned by the socket, every error code checked, the socket used by the network thread only |
+| SFML | image, font and sound parsers can be attacked with crafted files | the client only loads the files shipped in `assets/`; the server does not link SFML |
+| Dependencies in general | a vulnerable or tampered version | exact versions through CPM, the CPM script checked by SHA256 |
+
+### Monitoring over time
+
+Security is not only what the code does on day one; it is also noticing problems later.
+
+| What we watch | How | Status |
+| --- | --- | --- |
+| hostile or broken traffic on a running server | counters of invalid, ignored (flood) and queued-out datagrams; the server logs new drops every 5 seconds | in place |
+| crashed or vanished players | every join, departure and timeout is logged with the player number | in place |
+| regressions in validation | the codec tests (every truncation, 100 000 random datagrams) run on every pull request; Linux builds treat warnings as errors | in place |
+| vulnerabilities in Asio, SFML, Catch2 | follow the upstream releases and security advisories, bump through a reviewed pull request; GitHub's automatic dependency alerts do not read CPM declarations, so this check is manual | process |
+| network health in play | expose loss, latency and bandwidth (`NetStats`) to the metrics overlay | part 2 |

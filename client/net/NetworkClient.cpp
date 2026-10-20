@@ -68,6 +68,7 @@ bool NetworkClient::connect(const std::string& host, std::uint16_t port) {
     return false;
   }
 
+  // CONNECT lance la négociation UDP sans bloquer la boucle graphique.
   _state = ConnectionState::Connecting;
   _connectStarted = Clock::now();
   _lastConnectSent = _connectStarted;
@@ -179,6 +180,7 @@ std::uint64_t NetworkClient::droppedDatagrams() const {
 // Network thread: validate, then hand over to update() through the queue.
 void NetworkClient::onDatagram(const engine::network::Endpoint& from,
                                std::span<const std::uint8_t> datagram) {
+  // Le thread UDP filtre source et format, puis passe le paquet au thread de jeu via la file.
   if (from != _server) {
     ++_dropped; // only the server may talk to us
     return;
