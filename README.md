@@ -101,10 +101,9 @@ sampling; the graphical metrics overlay is owned by the client module.
 
 ## License
 
-Educational project made at Epitech. No open-source license has been chosen yet: the source code
-belongs to its authors and may not be reused without their permission.
+The source code is released under the [MIT License](LICENSE).
 
-Third-party components keep their own licenses:
+Third-party components and assets are not covered by it and keep their own licenses:
 
 | Component | License |
 | --- | --- |

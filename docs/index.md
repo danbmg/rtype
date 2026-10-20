@@ -67,3 +67,7 @@ graphics library, and the client never runs gameplay rules. The
 | Matteo | [@matraphlu](https://github.com/matraphlu) | architecture, engine, gameplay systems |
 | Théo | [@theodsh](https://github.com/theodsh) | graphical client, rendering, audio, input, accessibility |
 | Dan | [@danbmg](https://github.com/danbmg) | network, server, protocol, CI, documentation site |
+
+The source code is released under the
+[MIT License](https://github.com/EpitechPGE3-2026/G-ING-500-NCE-5-1-rtype-2/blob/main/LICENSE);
+third-party libraries and the R-Type sprites keep their own licenses, listed in the README.
