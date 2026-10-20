@@ -1,0 +1,7 @@
+if(NOT TARGET rtype-client-scene)
+  return()
+endif()
+add_executable(client_tests ClientTests.cpp)
+target_link_libraries(client_tests PRIVATE rtype-client-options rtype-client-scene Catch2::Catch2WithMain)
+rtype_set_warnings(client_tests)
+catch_discover_tests(client_tests)

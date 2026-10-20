@@ -1,0 +1,8 @@
+if(NOT RTYPE_BUILD_CLIENT)
+  return()
+endif()
+add_library(engine-input STATIC SFMLInput.cpp)
+add_library(engine::input ALIAS engine-input)
+target_include_directories(engine-input PUBLIC ${ENGINE_INCLUDE_ROOT})
+target_link_libraries(engine-input PRIVATE SFML::Window)
+rtype_set_warnings(engine-input)
