@@ -13,6 +13,9 @@
 *.gcda
 *.log
 
+# Documentation site built by mkdocs
+/site/
+
 # Dependency caches (CPM_SOURCE_CACHE when it points inside the repo)
 .cpm-cache/
 .cache/
