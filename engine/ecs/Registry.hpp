@@ -148,7 +148,3 @@ private:
 };
 
 } // namespace engine::ecs
-
-namespace rtype::ecs {
-using Registry = ::engine::ecs::Registry;
-} // namespace rtype::ecs

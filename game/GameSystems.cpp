@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -28,6 +29,42 @@ bool overlaps(const Position& lhsPosition, const Hitbox& lhsHitbox, const Positi
          lhsPosition.y + lhsHitbox.height > rhsPosition.y;
 }
 
+bool overlaps(const engine::ecs::Registry& registry, Entity lhs, Entity rhs) {
+  const auto* lhsPosition = registry.getComponent<Position>(lhs);
+  const auto* lhsHitbox = registry.getComponent<Hitbox>(lhs);
+  const auto* rhsPosition = registry.getComponent<Position>(rhs);
+  const auto* rhsHitbox = registry.getComponent<Hitbox>(rhs);
+  return lhsPosition != nullptr && lhsHitbox != nullptr && rhsPosition != nullptr &&
+         rhsHitbox != nullptr && overlaps(*lhsPosition, *lhsHitbox, *rhsPosition, *rhsHitbox);
+}
+
+Player* findPlayerById(engine::ecs::Registry& registry, std::int32_t id) {
+  if (id < 0) {
+    return nullptr;
+  }
+  for (const auto entity : registry.view<Player>()) {
+    auto* player = registry.getComponent<Player>(entity);
+    if (player->id == static_cast<std::uint32_t>(id)) {
+      return player;
+    }
+  }
+  return nullptr;
+}
+
+void validateBounds(WorldBounds bounds) {
+  if (!std::isfinite(bounds.width) || !std::isfinite(bounds.height) || bounds.width <= 0.0F ||
+      bounds.height <= 0.0F) {
+    throw std::invalid_argument("world bounds must be finite and positive");
+  }
+}
+
+// State shared by the enemy spawner and enemy fire systems. The scheduler stores copyable
+// std::function objects, so the systems share it through a shared_ptr.
+struct EnemyDirector {
+  std::mt19937 random;
+  float spawnTimer = 0.0F;
+};
+
 } // namespace
 
 void registerSystems(engine::ecs::Registry& registry) {
@@ -41,20 +78,68 @@ void registerSystems(engine::ecs::Registry& registry) {
   registry.registerComponent<Player>();
 }
 
-void registerGameplaySystems(
-    engine::core::SystemScheduler<engine::ecs::Registry>& scheduler, float deltaSeconds,
-    WorldBounds bounds) {
+void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,
+                             float deltaSeconds, WorldBounds bounds) {
   scheduler.addSystem("movement", [deltaSeconds](engine::ecs::Registry& registry) {
     updateMovement(registry, deltaSeconds);
   });
   scheduler.addSystem("player-bounds", [bounds](engine::ecs::Registry& registry) {
     keepEntitiesOnScreen(registry, bounds);
   });
+  scheduler.addSystem("offscreen-cleanup", [bounds](engine::ecs::Registry& registry) {
+    removeOffscreenEntities(registry, bounds);
+  });
   scheduler.addSystem("projectile-collisions", [](engine::ecs::Registry& registry) {
     resolveProjectileCollisions(registry);
   });
-  scheduler.addSystem("dead-entity-cleanup", [](engine::ecs::Registry& registry) {
-    removeDeadEntities(registry);
+  scheduler.addSystem("ship-collisions",
+                      [](engine::ecs::Registry& registry) { resolveShipCollisions(registry); });
+  scheduler.addSystem("player-deaths",
+                      [](engine::ecs::Registry& registry) { handlePlayerDeaths(registry); });
+  scheduler.addSystem("dead-entity-cleanup",
+                      [](engine::ecs::Registry& registry) { removeDeadEntities(registry); });
+}
+
+void registerEnemySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,
+                          float deltaSeconds, std::uint32_t seed, WorldBounds bounds,
+                          EnemyWaveSettings settings) {
+  validateBounds(bounds);
+  if (!std::isfinite(deltaSeconds) || deltaSeconds <= 0.0F ||
+      !std::isfinite(settings.spawnIntervalSeconds) || settings.spawnIntervalSeconds <= 0.0F ||
+      !std::isfinite(settings.fireChancePerSecond) || settings.fireChancePerSecond < 0.0F ||
+      !std::isfinite(settings.shotSpeed) || settings.shotSpeed <= 0.0F) {
+    throw std::invalid_argument("enemy wave timing, fire chance, and shot speed must be valid");
+  }
+
+  auto director = std::make_shared<EnemyDirector>(EnemyDirector{std::mt19937(seed), 0.0F});
+
+  scheduler.addSystem("enemy-spawner",
+                      [director, deltaSeconds, bounds, settings](engine::ecs::Registry& registry) {
+                        director->spawnTimer += deltaSeconds;
+                        while (director->spawnTimer >= settings.spawnIntervalSeconds) {
+                          director->spawnTimer -= settings.spawnIntervalSeconds;
+                          spawnRandomEnemy(registry, director->random, bounds);
+                        }
+                      });
+
+  scheduler.addSystem("enemy-fire", [director, deltaSeconds, bounds,
+                                     settings](engine::ecs::Registry& registry) {
+    const auto players = registry.view<Player, Position>();
+    if (players.empty()) {
+      return;
+    }
+    const double chance =
+        std::min(1.0, static_cast<double>(settings.fireChancePerSecond * deltaSeconds));
+    std::bernoulli_distribution fires(chance);
+    std::uniform_int_distribution<std::size_t> pickTarget(0, players.size() - 1);
+    for (const auto enemy : registry.view<Enemy, Position>()) {
+      // Only enemies already on screen may shoot.
+      if (registry.getComponent<Position>(enemy)->x >= bounds.width || !fires(director->random)) {
+        continue;
+      }
+      fireEnemyProjectile(registry, enemy, players[pickTarget(director->random)],
+                          settings.shotSpeed);
+    }
   });
 }
 
@@ -62,8 +147,10 @@ void applyPlayerInput(engine::ecs::Registry& registry, engine::ecs::Entity playe
                       float vertical, float speed) {
   auto* velocity = registry.getComponent<Velocity>(player);
   if (registry.getComponent<Player>(player) == nullptr || velocity == nullptr ||
-      !std::isfinite(horizontal) || !std::isfinite(vertical) || !std::isfinite(speed) || speed < 0.0F) {
-    throw std::invalid_argument("player input and speed must be finite and the entity must be a player");
+      !std::isfinite(horizontal) || !std::isfinite(vertical) || !std::isfinite(speed) ||
+      speed < 0.0F) {
+    throw std::invalid_argument(
+        "player input and speed must be finite and the entity must be a player");
   }
 
   horizontal = std::clamp(horizontal, -1.0F, 1.0F);
@@ -162,14 +249,16 @@ engine::ecs::Entity spawnRandomEnemy(engine::ecs::Registry& registry, std::mt199
 
   std::uniform_real_distribution<float> yDistribution(0.0F, bounds.height - 24.0F);
   std::uniform_real_distribution<float> speedDistribution(40.0F, 100.0F);
-  return spawnEnemy(registry, bounds.width, yDistribution(random), -speedDistribution(random), 0.0F);
+  return spawnEnemy(registry, bounds.width, yDistribution(random), -speedDistribution(random),
+                    0.0F);
 }
 
 engine::ecs::Entity fireProjectile(engine::ecs::Registry& registry, engine::ecs::Entity shooter,
-                                   bool friendly, int ownerId, float velocityX, float velocityY,
-                                   int damage) {
+                                   bool friendly, std::int32_t ownerId, float velocityX,
+                                   float velocityY, int damage) {
   const auto* position = registry.getComponent<Position>(shooter);
-  if (position == nullptr || !std::isfinite(velocityX) || !std::isfinite(velocityY) || damage <= 0) {
+  if (position == nullptr || !std::isfinite(velocityX) || !std::isfinite(velocityY) ||
+      damage <= 0) {
     throw std::invalid_argument("projectile shooter, velocity, and damage must be valid");
   }
 
@@ -200,10 +289,11 @@ engine::ecs::Entity fireEnemyProjectile(engine::ecs::Registry& registry, engine:
                                         engine::ecs::Entity target, float speed, int damage) {
   const auto* enemyPosition = registry.getComponent<Position>(enemy);
   const auto* targetPosition = registry.getComponent<Position>(target);
-  if (registry.getComponent<Enemy>(enemy) == nullptr || registry.getComponent<Player>(target) == nullptr ||
-      enemyPosition == nullptr || targetPosition == nullptr || !std::isfinite(speed) || speed <= 0.0F ||
-      damage <= 0) {
-    throw std::invalid_argument("enemy fire requires an enemy, player, and positive speed and damage");
+  if (registry.getComponent<Enemy>(enemy) == nullptr ||
+      registry.getComponent<Player>(target) == nullptr || enemyPosition == nullptr ||
+      targetPosition == nullptr || !std::isfinite(speed) || speed <= 0.0F || damage <= 0) {
+    throw std::invalid_argument(
+        "enemy fire requires an enemy, player, and positive speed and damage");
   }
 
   float startX = enemyPosition->x;
@@ -233,7 +323,18 @@ engine::ecs::Entity fireEnemyProjectile(engine::ecs::Registry& registry, engine:
     directionX /= distance;
     directionY /= distance;
   }
-  return fireProjectile(registry, enemy, false, -1, directionX * speed, directionY * speed, damage);
+  return fireProjectile(registry, enemy, false, Projectile::NO_OWNER, directionX * speed,
+                        directionY * speed, damage);
+}
+
+engine::ecs::Entity firePlayerProjectile(engine::ecs::Registry& registry,
+                                         engine::ecs::Entity player, float speed, int damage) {
+  const auto* shooter = registry.getComponent<Player>(player);
+  if (shooter == nullptr || !std::isfinite(speed) || speed <= 0.0F) {
+    throw std::invalid_argument("player fire requires a player and a positive speed");
+  }
+  return fireProjectile(registry, player, true, static_cast<std::int32_t>(shooter->id), speed, 0.0F,
+                        damage);
 }
 
 std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry) {
@@ -264,7 +365,7 @@ std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry) {
       if (projectile->friendly) {
         const auto* owner = registry.getComponent<Player>(targetEntity);
         if (owner != nullptr && projectile->ownerId >= 0 &&
-            owner->id == static_cast<std::size_t>(projectile->ownerId)) {
+            owner->id == static_cast<std::uint32_t>(projectile->ownerId)) {
           continue;
         }
       }
@@ -279,6 +380,13 @@ std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry) {
       }
 
       targetHealth->current = std::max(0, targetHealth->current - projectile->damage);
+      if (projectile->friendly && targetHealth->current == 0) {
+        auto* shooter = findPlayerById(registry, projectile->ownerId);
+        if (shooter != nullptr) {
+          shooter->score += static_cast<std::uint32_t>(
+              std::max(0, registry.getComponent<Enemy>(targetEntity)->points));
+        }
+      }
       projectilesToRemove.push_back(projectileEntity);
       ++collisions;
       break;
@@ -292,6 +400,70 @@ std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry) {
     registry.killEntity(projectile);
   }
   return collisions;
+}
+
+std::size_t resolveShipCollisions(engine::ecs::Registry& registry) {
+  std::size_t collisions = 0;
+  for (const auto player : registry.view<Player, Position, Hitbox, Health>()) {
+    auto* playerHealth = registry.getComponent<Health>(player);
+    for (const auto enemy : registry.view<Enemy, Position, Hitbox, Health>()) {
+      auto* enemyHealth = registry.getComponent<Health>(enemy);
+      if (playerHealth->current <= 0 || enemyHealth->current <= 0 ||
+          !overlaps(registry, player, enemy)) {
+        continue;
+      }
+      // Ramming destroys the Bydos and costs the player one hit point, without awarding points.
+      playerHealth->current -= 1;
+      enemyHealth->current = 0;
+      ++collisions;
+    }
+  }
+  return collisions;
+}
+
+std::size_t handlePlayerDeaths(engine::ecs::Registry& registry) {
+  std::size_t livesLost = 0;
+  for (const auto entity : registry.view<Player, Health>()) {
+    auto* player = registry.getComponent<Player>(entity);
+    auto* health = registry.getComponent<Health>(entity);
+    if (health->current > 0 || player->lives <= 0) {
+      continue;
+    }
+    --player->lives;
+    ++livesLost;
+    // With lives left the ship respawns in place; on its last life health stays at zero and
+    // removeDeadEntities destroys it.
+    if (player->lives > 0) {
+      health->current = health->max;
+    }
+  }
+  return livesLost;
+}
+
+std::size_t removeOffscreenEntities(engine::ecs::Registry& registry, WorldBounds bounds,
+                                    float margin) {
+  validateBounds(bounds);
+  if (!std::isfinite(margin) || margin < 0.0F) {
+    throw std::invalid_argument("offscreen margin must be finite and non-negative");
+  }
+
+  std::vector<Entity> offscreen;
+  for (const auto entity : registry.view<Position>()) {
+    if (registry.getComponent<Player>(entity) != nullptr) {
+      continue;
+    }
+    const auto* position = registry.getComponent<Position>(entity);
+    // A non-finite position can never come back on screen either.
+    if (!std::isfinite(position->x) || !std::isfinite(position->y) || position->x < -margin ||
+        position->x > bounds.width + margin || position->y < -margin ||
+        position->y > bounds.height + margin) {
+      offscreen.push_back(entity);
+    }
+  }
+  for (const auto entity : offscreen) {
+    registry.killEntity(entity);
+  }
+  return offscreen.size();
 }
 
 std::size_t removeDeadEntities(engine::ecs::Registry& registry) {
