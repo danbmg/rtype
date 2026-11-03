@@ -1,8 +1,10 @@
 #include "server/GameWorld.hpp"
+#include "game/EquipmentSystems.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 namespace server {
 
@@ -13,7 +15,6 @@ namespace {
 
 constexpr float PLAYER_SPEED = 250.0F; // world units per second
 constexpr float MISSILE_SPEED = 600.0F;
-constexpr float FIRE_COOLDOWN_SECONDS = 0.25F;
 constexpr float SHIP_X = 60.0F;
 constexpr Hitbox SHIP_HITBOX{33.0F, 17.0F}; // size of a ship in the provided sprite sheet
 constexpr int SHIP_LIVES = 3;
@@ -26,17 +27,15 @@ std::uint8_t toByte(int value) { return static_cast<std::uint8_t>(std::clamp(val
 
 } // namespace
 
-GameWorld::GameWorld(std::uint8_t tickRate, std::uint32_t seed, game::WorldBounds bounds)
-    : _bounds(bounds), _tickRate(tickRate),
-      _fireCooldownTicks(static_cast<std::uint32_t>(
-          std::lround(FIRE_COOLDOWN_SECONDS * static_cast<float>(tickRate)))) {
+GameWorld::GameWorld(std::uint8_t tickRate, std::uint32_t seed, game::WorldBounds bounds,
+                     game::LevelCatalog levels, std::uint32_t initialLevel)
+    : _bounds(bounds), _levels(seed, bounds, std::move(levels), initialLevel), _tickRate(tickRate) {
   if (tickRate == 0) {
     throw std::invalid_argument("tick rate must be positive");
   }
   _ships.fill(engine::ecs::INVALID_ENTITY);
   game::registerSystems(_registry);
   const float tickSeconds = 1.0F / static_cast<float>(tickRate);
-  game::registerEnemySystems(_scheduler, tickSeconds, seed, _bounds);
   game::registerGameplaySystems(_scheduler, tickSeconds, _bounds);
 }
 
@@ -51,6 +50,7 @@ engine::ecs::Entity GameWorld::spawnPlayer(std::uint8_t playerId) {
   _registry.addComponent(ship, Position{SHIP_X, laneY - SHIP_HITBOX.height / 2.0F});
   _registry.addComponent(ship, Velocity{});
   _registry.addComponent(ship, Player{playerId, SHIP_LIVES, 0});
+  _registry.addComponent(ship, Equipment{});
   _registry.addComponent(ship, Health{SHIP_HEALTH, SHIP_HEALTH});
   _registry.addComponent(ship, SHIP_HITBOX);
   _ships[playerId] = ship;
@@ -82,8 +82,9 @@ void GameWorld::applyInput(engine::ecs::Entity ship, std::uint8_t flags) {
 
   auto& cooldown = _fireCooldowns[ship];
   if ((flags & protocol::input::FIRE) != 0 && cooldown == 0) {
-    game::firePlayerProjectile(_registry, ship, MISSILE_SPEED);
-    cooldown = _fireCooldownTicks;
+    game::fireEquippedWeapon(_registry, ship, MISSILE_SPEED);
+    cooldown = std::max(1U, static_cast<std::uint32_t>(std::lround(
+        game::weaponCooldownSeconds(_registry, ship) * static_cast<float>(_tickRate))));
   }
 }
 
@@ -91,9 +92,14 @@ void GameWorld::step() {
   for (auto& [ship, cooldown] : _fireCooldowns) {
     cooldown = cooldown > 0 ? cooldown - 1 : 0;
   }
+  _levels.update(_registry, 1.0F / static_cast<float>(_tickRate));
   _scheduler.run(_registry);
   ++_tick;
   refreshPlayerStates();
+}
+
+void GameWorld::loadLevel(std::uint32_t number) {
+  _levels.loadLevel(_registry, number);
 }
 
 void GameWorld::refreshPlayerStates() {
@@ -109,12 +115,19 @@ void GameWorld::refreshPlayerStates() {
       // Out of lives: the ship was removed. Keep the score for the HUD.
       state->lives = 0;
       state->health = 0;
+      state->weapon = 0;
+      state->rapidFireMilliseconds = 0;
       _fireCooldowns.erase(ship);
       continue;
     }
     state->lives = toByte(player->lives);
     state->health = toByte(health->current);
     state->score = player->score;
+    if (const auto* equipment = _registry.getComponent<Equipment>(ship)) {
+      state->weapon = static_cast<std::uint8_t>(equipment->weapon);
+      state->rapidFireMilliseconds = static_cast<std::uint16_t>(std::clamp(
+          std::lround(equipment->rapidFireSeconds * 1000.0F), 0L, 65535L));
+    }
   }
 }
 
@@ -177,8 +190,9 @@ std::optional<protocol::EntityState> GameWorld::describe(engine::ecs::Entity ent
   if (const auto* player = _registry.getComponent<Player>(entity)) {
     state.kind = protocol::EntityKind::Player;
     state.playerId = static_cast<std::uint8_t>(player->id);
-  } else if (_registry.getComponent<Enemy>(entity) != nullptr) {
-    state.kind = protocol::EntityKind::Bydos;
+  } else if (const auto* enemy = _registry.getComponent<Enemy>(entity)) {
+    state.kind = enemy->pattern == Enemy::BOSS_PATTERN ? protocol::EntityKind::Boss
+                                                       : protocol::EntityKind::Bydos;
   } else if (const auto* projectile = _registry.getComponent<Projectile>(entity)) {
     state.kind = projectile->friendly ? protocol::EntityKind::PlayerMissile
                                       : protocol::EntityKind::EnemyMissile;
@@ -186,6 +200,8 @@ std::optional<protocol::EntityState> GameWorld::describe(engine::ecs::Entity ent
         projectile->ownerId < protocol::MAX_PLAYERS) {
       state.playerId = static_cast<std::uint8_t>(projectile->ownerId);
     }
+  } else if (const auto* pickup = _registry.getComponent<Pickup>(entity)) {
+    state.kind = static_cast<protocol::EntityKind>(5 + static_cast<std::uint8_t>(pickup->type));
   } else {
     return std::nullopt; // not something clients know how to draw
   }

@@ -47,7 +47,8 @@ std::vector<std::vector<State>> chunk(const std::vector<State>& items, std::size
 }
 
 const ServerConfig& validated(const ServerConfig& config) {
-  if (config.tickRate == 0 || config.ticksPerSnapshot == 0 || config.clientTimeout <= 0ms ||
+  if (config.initialLevel == 0 || config.tickRate == 0 || config.ticksPerSnapshot == 0 ||
+      config.clientTimeout <= 0ms ||
       config.inboundCapacity == 0 || config.maxPacketsPerClientPerTick == 0) {
     throw std::invalid_argument("invalid server configuration");
   }
@@ -59,7 +60,7 @@ const ServerConfig& validated(const ServerConfig& config) {
 Server::Server(ServerConfig config)
     : _config(validated(config)), _socket(protocol::MAX_DATAGRAM_SIZE),
       _inbound(config.inboundCapacity), _sessions(config.maxPlayers),
-      _world(config.tickRate, config.seed) {}
+      _world(config.tickRate, config.seed, {}, {}, config.initialLevel) {}
 
 Server::~Server() { stop(); }
 

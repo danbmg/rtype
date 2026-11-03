@@ -121,6 +121,14 @@ void Scene::drawGame(IRenderer& renderer, const net::NetworkClient& network, boo
       renderer.drawText("P" + std::to_string(entity.playerId + 1), x, y - 19.0F, 14,
                         playerColor(entity.playerId));
       break;
+    case EntityKind::ExtraLife:
+    case EntityKind::Heal:
+    case EntityKind::RapidFire:
+    case EntityKind::DoubleShot:
+    case EntityKind::SpreadShot:
+    case EntityKind::HeavyShot:
+      break; // Pickup graphics are owned by the client implementation.
+    case EntityKind::Boss: // Placeholder until dedicated boss artwork is implemented.
     case EntityKind::Bydos:
       renderer.drawSprite("bydos", {frame * 33, 0, 33, 36}, x, y, 32.0F * scaleX, 24.0F * scaleY);
       break;

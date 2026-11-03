@@ -109,6 +109,8 @@ struct PayloadWriter {
       writer.writeU8(player.lives);
       writer.writeU8(player.health);
       writer.writeU32(player.score);
+      writer.writeU8(player.weapon);
+      writer.writeU16(player.rapidFireMilliseconds);
     }
   }
 
@@ -131,7 +133,7 @@ DecodeError readEntityState(BinaryReader& reader, EntityState& state) {
   if (!reader.ok()) {
     return DecodeError::SizeMismatch;
   }
-  if (kind < toByte(EntityKind::Player) || kind > toByte(EntityKind::EnemyMissile) ||
+  if (kind < toByte(EntityKind::Player) || kind > toByte(EntityKind::HeavyShot) ||
       (state.playerId != NO_PLAYER && !isValidPlayerId(state.playerId)) ||
       !std::isfinite(state.x) || !std::isfinite(state.y)) {
     return DecodeError::InvalidValue;
@@ -262,7 +264,9 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
       player.lives = reader.readU8();
       player.health = reader.readU8();
       player.score = reader.readU32();
-      if (!isValidPlayerId(player.playerId)) {
+      player.weapon = reader.readU8();
+      player.rapidFireMilliseconds = reader.readU16();
+      if (!isValidPlayerId(player.playerId) || player.weapon > 3) {
         return DecodeError::InvalidValue;
       }
     }

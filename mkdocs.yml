@@ -67,6 +67,8 @@ nav:
       - Architecture overview: architecture.md
       - Engine and gameplay: matraphlu-engine.md
       - Network and server: network.md
+      - Levels and waves: levels.md
+      - Weapons and bonuses: equipment.md
       - Graphical client: theodsh-client.md
   - Protocol RFC: protocol/rfc.md
   - Technical choices:

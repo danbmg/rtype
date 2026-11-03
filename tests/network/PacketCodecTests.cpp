@@ -98,7 +98,7 @@ TEST_CASE("Decoded values are the ones that were sent", "[protocol][codec]") {
 TEST_CASE("The header layout matches the RFC byte for byte", "[protocol][codec]") {
   const auto datagram =
       protocol::encode(7, protocol::Input{protocol::input::UP | protocol::input::FIRE});
-  const std::vector<std::uint8_t> expected{0x52, 0x54, 0x01, 0x02, 0x00, 0x00,
+  const std::vector<std::uint8_t> expected{0x52, 0x54, protocol::VERSION, 0x02, 0x00, 0x00,
                                            0x00, 0x07, 0x00, 0x01, 0x11};
   CHECK(datagram == expected);
 }
@@ -195,7 +195,7 @@ TEST_CASE("Out-of-range field values are rejected", "[protocol][codec][malformed
   CHECK(entity(1, 0, 1.0F) == DecodeError::None);
   CHECK(entity(1, protocol::NO_PLAYER, 1.0F) == DecodeError::None);
   CHECK(entity(0, 0, 1.0F) == DecodeError::InvalidValue);
-  CHECK(entity(5, 0, 1.0F) == DecodeError::InvalidValue);
+  CHECK(entity(12, 0, 1.0F) == DecodeError::InvalidValue);
   CHECK(entity(1, 4, 1.0F) == DecodeError::InvalidValue);
   CHECK(entity(1, 0, std::numeric_limits<float>::quiet_NaN()) == DecodeError::InvalidValue);
   CHECK(entity(1, 0, std::numeric_limits<float>::infinity()) == DecodeError::InvalidValue);
@@ -248,4 +248,34 @@ TEST_CASE("Random and corrupted datagrams never crash the decoder", "[protocol][
     }
   }
   CHECK(accepted > 0);
+}
+
+TEST_CASE("Boss entities survive the network codec", "[protocol][codec][boss]") {
+  const auto result = protocol::decode(protocol::encode(
+      1, protocol::EntitySpawn{{{42, protocol::EntityKind::Boss, protocol::NO_PLAYER,
+                                   688.0F, 264.0F}}}));
+  REQUIRE(result.packet);
+  const auto& spawn = std::get<protocol::EntitySpawn>(result.packet->payload);
+  REQUIRE(spawn.entities.size() == 1);
+  CHECK(spawn.entities.front().kind == protocol::EntityKind::Boss);
+}
+
+TEST_CASE("Equipment status and every pickup type survive the codec", "[protocol][codec][equipment]") {
+  const auto decoded = protocol::decode(protocol::encode(
+      1, protocol::PlayerStatus{{{0, 4, 3, 1000, 3, 8000}}}));
+  REQUIRE(decoded.packet);
+  const auto& state = std::get<protocol::PlayerStatus>(decoded.packet->payload).players.front();
+  CHECK(state.weapon == 3);
+  CHECK(state.rapidFireMilliseconds == 8000);
+  CHECK(state.lives == 4);
+  auto malformed = protocol::encode(1, protocol::PlayerStatus{{{0, 3, 3, 0, 4, 0}}});
+  CHECK(errorOf(malformed) == DecodeError::InvalidValue);
+  for (std::uint8_t kind = 6; kind <= 11; ++kind) {
+    const auto result = protocol::decode(protocol::encode(
+        1, protocol::EntitySpawn{{{42, static_cast<protocol::EntityKind>(kind),
+                                   protocol::NO_PLAYER, 200, 100}}}));
+    REQUIRE(result.packet);
+    CHECK(static_cast<std::uint8_t>(std::get<protocol::EntitySpawn>(result.packet->payload)
+                                       .entities.front().kind) == kind);
+  }
 }

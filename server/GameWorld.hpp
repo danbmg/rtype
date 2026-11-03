@@ -10,6 +10,7 @@
 #include "engine/core/SystemScheduler.hpp"
 #include "engine/ecs/Registry.hpp"
 #include "game/GameSystems.hpp"
+#include "game/LevelDirector.hpp"
 
 namespace server {
 
@@ -23,7 +24,8 @@ public:
     std::vector<rtype::protocol::EntityRemoval> destroyed;
   };
 
-  GameWorld(std::uint8_t tickRate, std::uint32_t seed, game::WorldBounds bounds = {});
+  GameWorld(std::uint8_t tickRate, std::uint32_t seed, game::WorldBounds bounds = {},
+            game::LevelCatalog levels = {}, std::uint32_t initialLevel = 1);
 
   engine::ecs::Entity spawnPlayer(std::uint8_t playerId);
   void removePlayer(std::uint8_t playerId, engine::ecs::Entity ship);
@@ -41,6 +43,11 @@ public:
   std::vector<rtype::protocol::EntityState> snapshot() const;
   std::vector<rtype::protocol::PlayerState> playerStates() const;
 
+  // Server API for campaign control and a future level HUD/network message.
+  const game::LevelProgress& levelProgress() const { return _levels.progress(); }
+  const game::LevelDefinition& levelDefinition() const { return _levels.definition(); }
+  void loadLevel(std::uint32_t number);
+
   std::uint32_t tick() const { return _tick; }
   std::uint8_t tickRate() const { return _tickRate; }
   const game::WorldBounds& bounds() const { return _bounds; }
@@ -53,9 +60,9 @@ private:
   engine::ecs::Registry _registry;
   engine::core::SystemScheduler<engine::ecs::Registry> _scheduler;
   game::WorldBounds _bounds;
+  game::LevelDirector _levels;
   std::uint8_t _tickRate;
   std::uint32_t _tick = 0;
-  std::uint32_t _fireCooldownTicks;
   std::unordered_map<engine::ecs::Entity, std::uint32_t> _fireCooldowns;
   std::unordered_map<engine::ecs::Entity, rtype::protocol::EntityState> _known;
   std::array<engine::ecs::Entity, rtype::protocol::MAX_PLAYERS> _ships{};

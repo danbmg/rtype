@@ -23,9 +23,10 @@ volatile std::sig_atomic_t stopRequested = 0;
 extern "C" void onSignal(int /*signal*/) { stopRequested = 1; }
 
 void printUsage(std::ostream& output) {
-  output << "USAGE: ./r-type_server [-p port]\n"
+  output << "USAGE: ./r-type_server [-p port] [--level number]\n"
             "  -p port   UDP port to listen on (default "
          << rtype::protocol::DEFAULT_PORT << ")\n"
+         << "  --level number  starting level (default 1)\n"
          << "  -h        show this help\n";
 }
 
@@ -55,6 +56,17 @@ int main(int argc, char** argv) {
         return EXIT_ERROR;
       }
       config.port = *port;
+      continue;
+    }
+    if (argument == "--level" && index + 1 < argc) {
+      const std::string_view text = argv[++index];
+      std::uint32_t level = 0;
+      const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), level);
+      if (error != std::errc{} || end != text.data() + text.size() || level == 0) {
+        engine::core::Logger::error("invalid level: " + std::string(text));
+        return EXIT_ERROR;
+      }
+      config.initialLevel = level;
       continue;
     }
     printUsage(std::cerr);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/components/Enemy.hpp"
+#include "common/components/Equipment.hpp"
 #include "common/components/Health.hpp"
 #include "common/components/Hitbox.hpp"
 #include "common/components/Player.hpp"

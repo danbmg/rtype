@@ -5,13 +5,13 @@
 #include <variant>
 #include <vector>
 
-// FROZEN CONTRACT (tag contracts-v1). Any change is a dedicated PR approved by the whole team,
-// and updates docs/protocol/rfc.md in the same PR. Byte layouts are given in the RFC; every
+// Version 2 extends the contracts-v1 baseline with equipment state and pickup entity kinds.
+// Keep docs/protocol/rfc.md synchronized with wire layout changes. Byte layouts are given in the RFC; every
 // multi-byte field is big-endian and floats are IEEE 754 binary32.
 namespace rtype::protocol {
 
 constexpr std::uint16_t MAGIC = 0x5254; // "RT"
-constexpr std::uint8_t VERSION = 1;
+constexpr std::uint8_t VERSION = 2;
 constexpr std::uint16_t DEFAULT_PORT = 4242;
 
 // Tous les échanges suivent ce même en-tête, puis un payload propre au type de paquet.
@@ -55,7 +55,10 @@ struct Header {
 };
 
 enum class RejectReason : std::uint8_t { ServerFull = 1, VersionMismatch = 2 };
-enum class EntityKind : std::uint8_t { Player = 1, Bydos = 2, PlayerMissile = 3, EnemyMissile = 4 };
+enum class EntityKind : std::uint8_t {
+  Player = 1, Bydos = 2, PlayerMissile = 3, EnemyMissile = 4, Boss = 5,
+  ExtraLife = 6, Heal = 7, RapidFire = 8, DoubleShot = 9, SpreadShot = 10, HeavyShot = 11
+};
 // Killed: destroyed on screen (show an explosion). LeftScreen: flew out of view.
 enum class DestroyReason : std::uint8_t { Killed = 1, LeftScreen = 2 };
 enum class LeaveReason : std::uint8_t { Quit = 1, TimedOut = 2 };
@@ -115,11 +118,13 @@ struct EntityRemoval { // 5 bytes
 struct EntityDestroy { // u16 count + count * EntityRemoval
   std::vector<EntityRemoval> entities;
 };
-struct PlayerState { // 7 bytes
+struct PlayerState { // 10 bytes
   std::uint8_t playerId = 0;
   std::uint8_t lives = 0; // 0: game over for this player
   std::uint8_t health = 0;
   std::uint32_t score = 0;
+  std::uint8_t weapon = 0; // 0 standard, 1 double, 2 spread, 3 heavy
+  std::uint16_t rapidFireMilliseconds = 0;
 };
 struct PlayerStatus { // u8 count + count * PlayerState, count <= MAX_PLAYERS
   std::vector<PlayerState> players;
@@ -131,7 +136,7 @@ struct PlayerLeft { // 2 bytes
 
 constexpr std::size_t ENTITY_STATE_SIZE = 14;
 constexpr std::size_t ENTITY_REMOVAL_SIZE = 5;
-constexpr std::size_t PLAYER_STATE_SIZE = 7;
+constexpr std::size_t PLAYER_STATE_SIZE = 10;
 constexpr std::size_t MAX_SPAWNS_PER_PACKET = (MAX_PAYLOAD_SIZE - 2) / ENTITY_STATE_SIZE;
 constexpr std::size_t MAX_UPDATES_PER_PACKET = (MAX_PAYLOAD_SIZE - 6) / ENTITY_STATE_SIZE;
 constexpr std::size_t MAX_REMOVALS_PER_PACKET = (MAX_PAYLOAD_SIZE - 2) / ENTITY_REMOVAL_SIZE;

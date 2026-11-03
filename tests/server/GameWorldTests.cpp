@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "server/GameWorld.hpp"
+#include "game/EquipmentSystems.hpp"
 
 namespace protocol = rtype::protocol;
 using namespace rtype::common::components;
@@ -136,4 +137,93 @@ TEST_CASE("Bydos keep coming even with nobody connected", "[server][world]") {
   runTicks(world, 3 * TICK_RATE);
   CHECK(countKind(world.snapshot(), protocol::EntityKind::Bydos) >= 2);
   CHECK(world.tick() == 3U * TICK_RATE);
+}
+
+TEST_CASE("GameWorld exposes and loads server levels without resetting players", "[server][world][levels]") {
+  GameWorld world(TICK_RATE, 1U, {}, {}, 100);
+  CHECK(world.levelProgress().level == 100);
+  const auto ship = world.spawnPlayer(0);
+  world.step();
+  world.loadLevel(2);
+  CHECK(world.levelProgress().level == 2);
+  CHECK(world.levelProgress().wave == 1);
+  CHECK(world.registry().containsEntity(ship));
+  CHECK(world.playerStates().front().lives == 3);
+  CHECK(world.levelDefinition().number == 2);
+  CHECK_THROWS_AS(world.loadLevel(0), std::invalid_argument);
+  CHECK(world.levelProgress().level == 2);
+}
+
+TEST_CASE("GameWorld advances custom levels and replicates bosses", "[server][world][levels]") {
+  game::LevelCatalog catalog;
+  game::LevelDefinition level;
+  level.number = 1;
+  level.nextLevelDelaySeconds = 0.0F;
+  game::WaveDefinition bossWave;
+  bossWave.boss = true;
+  bossWave.enemyCount = 1;
+  bossWave.enemyHealth = 30;
+  bossWave.spawnIntervalSeconds = 0.01F;
+  bossWave.fireChancePerSecond = 0.0F;
+  level.waves.push_back(bossWave);
+  catalog.define(level);
+  GameWorld world(TICK_RATE, 42U, {}, catalog);
+  const auto ship = world.spawnPlayer(0);
+  world.registry().getComponent<Player>(ship)->score = 1234;
+  world.step();
+  const auto changes = world.collectChanges();
+  const auto bossState = std::ranges::find(changes.spawned, protocol::EntityKind::Boss,
+                                          &protocol::EntityState::kind);
+  REQUIRE(bossState != changes.spawned.end());
+  world.registry().getComponent<Health>(bossState->id)->current = 0;
+  world.step(); // gameplay cleanup removes the boss
+  world.step(); // director observes the completed encounter
+  CHECK(world.levelProgress().level == 2);
+  CHECK(world.levelProgress().wave == 1);
+  CHECK(world.registry().getComponent<Player>(ship)->score == 1234);
+  const auto removals = world.collectChanges();
+  CHECK(std::ranges::find(removals.destroyed, bossState->id,
+                         &protocol::EntityRemoval::id) != removals.destroyed.end());
+}
+
+TEST_CASE("Server enforces weapon cooldowns and rapid fire", "[server][world][equipment]") {
+  for (const bool rapid : {false, true}) {
+    GameWorld world(TICK_RATE, 42U);
+    const auto ship = world.spawnPlayer(0);
+    game::applyPickup(world.registry(), ship, PickupType::DoubleShot);
+    if (rapid) {
+      game::applyPickup(world.registry(), ship, PickupType::RapidFire);
+    }
+    for (int tick = 0; tick < 30; ++tick) {
+      world.applyInput(ship, protocol::input::FIRE);
+      world.applyInput(ship, protocol::input::FIRE); // duplicate cannot bypass cooldown
+      world.step();
+    }
+    CHECK(world.registry().view<Projectile>().size() == (rapid ? 10 : 4));
+    REQUIRE(world.playerStates().size() == 1);
+    CHECK(world.playerStates().front().weapon == 1);
+    CHECK(world.playerStates().front().rapidFireMilliseconds == (rapid ? 7500 : 0));
+  }
+}
+
+TEST_CASE("Server replicates bonus types, collection and equipment state", "[server][world][equipment]") {
+  GameWorld world(TICK_RATE, 42U);
+  const auto ship = world.spawnPlayer(0);
+  const auto item = game::spawnPickup(world.registry(), PickupType::SpreadShot, 300, 100);
+  world.step();
+  auto changes = world.collectChanges();
+  const auto state = std::ranges::find(changes.spawned, item, &protocol::EntityState::id);
+  REQUIRE(state != changes.spawned.end());
+  CHECK(state->kind == protocol::EntityKind::SpreadShot);
+  *world.registry().getComponent<Position>(item) = *world.registry().getComponent<Position>(ship);
+  world.step();
+  CHECK(world.playerStates().front().weapon == 2);
+  changes = world.collectChanges();
+  CHECK(std::ranges::find(changes.destroyed, item, &protocol::EntityRemoval::id) != changes.destroyed.end());
+  game::applyPickup(world.registry(), ship, PickupType::RapidFire);
+  game::spawnPickup(world.registry(), PickupType::Heal, 400, 200);
+  world.loadLevel(100);
+  CHECK(world.registry().view<Pickup>().empty());
+  CHECK(world.registry().getComponent<Equipment>(ship)->weapon == WeaponType::Spread);
+  CHECK(world.registry().getComponent<Equipment>(ship)->rapidFireSeconds == 8.0F);
 }

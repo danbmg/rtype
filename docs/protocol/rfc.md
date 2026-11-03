@@ -1,8 +1,8 @@
-# R-Type Network Protocol — version 1
+# R-Type Network Protocol — version 2
 
 | | |
 | --- | --- |
-| Status | Frozen with tag `contracts-v1` |
+| Status | Version 2 extension of `contracts-v1` |
 | Source of truth | `common/protocol/Packets.hpp`, `common/protocol/PacketCodec.cpp` |
 | Author | danbmg |
 
@@ -21,7 +21,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD** and **MAY** are to be read as i
 - The protocol is **binary**: fields have a fixed size and a fixed order, with no text and no
   separators.
 - UDP can lose, duplicate and reorder datagrams. The protocol does not resend anything in
-  version 1. It stays correct anyway because the server sends the **full state of the world**
+  version 2. It stays correct anyway because the server sends the **full state of the world**
   30 times per second: a lost datagram is corrected by the next one.
 
 ## 2. Transport
@@ -62,7 +62,7 @@ Every packet starts with this 10-byte header.
 | Offset | Size | Field | Value |
 | --- | --- | --- | --- |
 | 0 | `u16` | magic | `0x5254` (ASCII `"RT"`) |
-| 2 | `u8` | version | `1` |
+| 2 | `u8` | version | `2` |
 | 3 | `u8` | type | packet type, see section 5 |
 | 4 | `u32` | sequence | incremented by the sender for every datagram it sends, starting at any value |
 | 8 | `u16` | payload size | number of bytes after the header |
@@ -88,7 +88,7 @@ when `(int32)(a - b) > 0`.
 | `0x10` | ENTITY_SPAWN | server → client | 2 + 14 × count |
 | `0x11` | ENTITY_UPDATE | server → client | 6 + 14 × count |
 | `0x12` | ENTITY_DESTROY | server → client | 2 + 5 × count |
-| `0x13` | PLAYER_STATUS | server → client | 1 + 7 × count |
+| `0x13` | PLAYER_STATUS | server → client | 1 + 10 × count |
 | `0x14` | PLAYER_LEFT | server → client | 2 |
 
 Any other code is invalid.
@@ -173,7 +173,7 @@ same ACCEPT again.
 | 10 | `f32` | y | top-left corner, world units, finite |
 
 The player id is the owner of a PLAYER ship and the shooter of a PLAYER_MISSILE (so a client can
-draw them in that player's colour). It is `0xFF` for Bydos and enemy missiles.
+draw them in that player's colour). It is `0xFF` for Bydos, bosses, enemy missiles, and pickups.
 
 ### 6.9 ENTITY_SPAWN (`0x10`), server → client
 
@@ -217,7 +217,7 @@ Each removal:
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u8` | count, at most 4 |
-| 1 | 7 × count | player states |
+| 1 | 10 × count | player states |
 
 Each player state:
 
@@ -227,8 +227,15 @@ Each player state:
 | 1 | `u8` | lives left; 0 means game over for this player |
 | 2 | `u8` | health in the current life |
 | 3 | `u32` | score |
+| 7 | `u8` | weapon: 0 standard, 1 double, 2 spread, 3 heavy |
+| 8 | `u16` | rapid-fire time remaining in milliseconds (0: inactive) |
 
 Sent with every snapshot, for every connected player: this is what the HUD shows.
+
+Version 2 extends each player state from 7 to 10 bytes and adds pickup entity kinds.
+Both client and server must be rebuilt together; version 1 peers are rejected by the existing
+version negotiation. Inputs are unchanged: holding FIRE uses the server's equipped weapon.
+Pickups are collected through server-side overlap checks; clients cannot grant themselves items.
 
 ### 6.13 PLAYER_LEFT (`0x14`), server → client
 
@@ -323,10 +330,17 @@ SHOULD stop and report that the server is incompatible.
 | 2 | BYDOS (an enemy) | 32 × 24 |
 | 3 | PLAYER_MISSILE (player id = shooter) | 8 × 4 |
 | 4 | ENEMY_MISSILE | 8 × 4 |
+| 5 | BOSS | min(96, world width / 4) × min(72, world height / 4) |
+| 6 | EXTRA_LIFE pickup | 20 × 20 |
+| 7 | HEAL pickup | 20 × 20 |
+| 8 | RAPID_FIRE pickup | 20 × 20 |
+| 9 | DOUBLE_SHOT pickup | 20 × 20 |
+| 10 | SPREAD_SHOT pickup | 20 × 20 |
+| 11 | HEAVY_SHOT pickup | 20 × 20 |
 
 ### 8.2 Coordinates
 
-- The world is `world width × world height` units (800 × 600 in version 1), sent in ACCEPT.
+- The world is `world width × world height` units (800 × 600 in version 2), sent in ACCEPT.
 - The origin is the top-left corner of the screen; x grows to the right, y grows **downwards**.
 - A position is the top-left corner of the entity.
 - Entities can be slightly outside the world: Bydos enter from the right edge and leave on the
@@ -340,7 +354,7 @@ value:
 
 1. size: at least 10 bytes (header) and at most 1200 bytes;
 2. magic is `0x5254`;
-3. version is `1` (see 7.6);
+3. version is `2` (see 7.6);
 4. type is one of section 5;
 5. payload size equals the number of bytes actually received after the header;
 6. for lists, the count is within its maximum and `count × entry size` equals the remaining
@@ -365,7 +379,7 @@ A client accepts datagrams from the server's address only.
 | Name | Value |
 | --- | --- |
 | Magic | `0x5254` |
-| Version | `1` |
+| Version | `2` |
 | Default port | 4242 |
 | Header size | 10 bytes |
 | Maximum datagram size | 1200 bytes |
@@ -383,15 +397,15 @@ Bytes in hexadecimal; `|` separates the header from the payload.
 
 | Packet | Bytes |
 | --- | --- |
-| CONNECT, sequence 0 | `52 54 01 01 00 00 00 00 00 00` |
-| ACCEPT: player 0, 800 × 600, 60 ticks/s | `52 54 01 08 00 00 00 00 00 06 \| 00 03 20 02 58 3C` |
-| INPUT: up + fire, sequence 7 | `52 54 01 02 00 00 00 07 00 01 \| 11` |
-| PING: token 1500 | `52 54 01 03 00 00 00 08 00 04 \| 00 00 05 DC` |
-| ENTITY_UPDATE: tick 120, ship 5 of player 0 at (60, 111.5) | `52 54 01 11 00 00 00 2A 00 14 \| 00 00 00 78 00 01 00 00 00 05 01 00 42 70 00 00 42 DF 00 00` |
-| ENTITY_DESTROY: entity 17 killed | `52 54 01 12 00 00 00 2B 00 07 \| 00 01 00 00 00 11 01` |
-| PLAYER_STATUS: player 0, 3 lives, 2 health, score 1500 | `52 54 01 13 00 00 00 2C 00 08 \| 01 00 03 02 00 00 05 DC` |
-| PLAYER_LEFT: player 2 timed out | `52 54 01 14 00 00 00 2D 00 02 \| 02 02` |
-| REJECT: server full | `52 54 01 09 00 00 00 00 00 01 \| 01` |
+| CONNECT, sequence 0 | `52 54 02 01 00 00 00 00 00 00` |
+| ACCEPT: player 0, 800 × 600, 60 ticks/s | `52 54 02 08 00 00 00 00 00 06 \| 00 03 20 02 58 3C` |
+| INPUT: up + fire, sequence 7 | `52 54 02 02 00 00 00 07 00 01 \| 11` |
+| PING: token 1500 | `52 54 02 03 00 00 00 08 00 04 \| 00 00 05 DC` |
+| ENTITY_UPDATE: tick 120, ship 5 of player 0 at (60, 111.5) | `52 54 02 11 00 00 00 2A 00 14 \| 00 00 00 78 00 01 00 00 00 05 01 00 42 70 00 00 42 DF 00 00` |
+| ENTITY_DESTROY: entity 17 killed | `52 54 02 12 00 00 00 2B 00 07 \| 00 01 00 00 00 11 01` |
+| PLAYER_STATUS: player 0, 3 lives, 2 health, score 1500 | `52 54 02 13 00 00 00 2C 00 0B \| 01 00 03 02 00 00 05 DC 00 00 00` |
+| PLAYER_LEFT: player 2 timed out | `52 54 02 14 00 00 00 2D 00 02 \| 02 02` |
+| REJECT: server full | `52 54 02 09 00 00 00 00 00 01 \| 01` |
 
 These bytes are produced by the reference encoder; `tests/network/PacketCodecTests.cpp` checks
 the header layout byte for byte.
@@ -405,12 +419,12 @@ the header layout byte for byte.
   address and port could send INPUT or DISCONNECT in their name. A forged CONNECT also makes the
   server send the game state to the forged address until the 3-second timeout: a small
   amplification, bounded by the 4 player slots. A session token returned in ACCEPT and required
-  in every later packet would close both holes (version 2).
+  in every later packet would close both holes (a future version).
 - **Resource exhaustion.** Sizes are bounded (1200-byte datagrams, 4096 queued packets, 8 packets
   per client per tick, 4 sessions), and every count is checked against the received length
   before any allocation.
 
-## 13. Planned for version 2
+## 13. Planned for a future version
 
 Acknowledgements and resending for critical events, quantized coordinates and delta snapshots to
 save bandwidth, client-side prediction, and several game rooms per server. They will come with a

@@ -3,6 +3,7 @@
 namespace rtype::common::components {
 
 struct Enemy {
+  static constexpr int BOSS_PATTERN = 1;
   int points = 0;
   int pattern = 0;
 };

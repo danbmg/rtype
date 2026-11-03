@@ -365,3 +365,31 @@ TEST_CASE("Enemy waves are reproducible with the same seed", "[game][spawn]") {
           second.registry.getComponent<Position>(secondEnemies[index])->y);
   }
 }
+
+TEST_CASE("Boss stays on screen and survives ship contact", "[game][boss]") {
+  TestWorld world;
+  engine::core::SystemScheduler<engine::ecs::Registry> scheduler;
+  game::EnemyWaveSettings settings;
+  settings.bossEveryWaves = 1;
+  settings.spawnIntervalSeconds = 0.25F;
+  settings.fireChancePerSecond = 0.0F;
+  game::registerEnemySystems(scheduler, 0.25F, 42U, {}, settings);
+  game::registerGameplaySystems(scheduler, 0.25F);
+  scheduler.run(world.registry);
+  REQUIRE(world.registry.view<Enemy>().size() == 1);
+  const auto boss = world.registry.view<Enemy>().front();
+  for (int tick = 0; tick < 1000; ++tick) {
+    scheduler.run(world.registry);
+    REQUIRE(world.registry.containsEntity(boss));
+    const auto* position = world.registry.getComponent<Position>(boss);
+    CHECK(position->y >= 0.0F);
+    CHECK(position->y + world.registry.getComponent<Hitbox>(boss)->height <= 600.0F);
+  }
+  const auto position = *world.registry.getComponent<Position>(boss);
+  const auto player = world.addPlayer(position.x, position.y);
+  const int health = world.registry.getComponent<Health>(boss)->current;
+  CHECK(game::resolveShipCollisions(world.registry) == 1);
+  CHECK(world.registry.getComponent<Health>(boss)->current == health - 1);
+  CHECK(world.registry.getComponent<Health>(player)->current == 2);
+  CHECK(game::resolveShipCollisions(world.registry) == 0);
+}
