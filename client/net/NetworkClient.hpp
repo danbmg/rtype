@@ -43,11 +43,18 @@ public:
 
   // Starts connecting without blocking; update() then moves state() to Connected, Rejected or
   // Failed. Returns false at once if the host cannot be resolved or no socket can be opened.
-  bool connect(const std::string& host, std::uint16_t port);
+  // The mode and difficulty only matter if nobody is playing yet: otherwise the player joins
+  // the running game, and gameStatus() tells which one it is.
+  bool connect(const std::string& host, std::uint16_t port,
+               rtype::protocol::GameMode mode = rtype::protocol::GameMode::Story,
+               rtype::protocol::Difficulty difficulty = rtype::protocol::Difficulty::Normal);
 
   // connect(), then update() until connected or the timeout. For tools and tests.
   bool connectBlocking(const std::string& host, std::uint16_t port,
-                       std::chrono::milliseconds timeout = std::chrono::seconds(3));
+                       std::chrono::milliseconds timeout = std::chrono::seconds(3),
+                       rtype::protocol::GameMode mode = rtype::protocol::GameMode::Story,
+                       rtype::protocol::Difficulty difficulty =
+                           rtype::protocol::Difficulty::Normal);
 
   // Tells the server we leave (best effort) and closes the socket.
   void disconnect();
@@ -69,6 +76,10 @@ public:
 
   const std::unordered_map<std::uint32_t, RemoteEntity>& entities() const { return _entities; }
   const std::vector<rtype::protocol::PlayerState>& players() const { return _players; }
+  // Mode, level, wave, boss health and countdowns, from the last snapshot.
+  const rtype::protocol::GameStatus& gameStatus() const { return _gameStatus; }
+  // Title, story and background theme of the current level (level 0: not received yet).
+  const rtype::protocol::LevelInfo& levelInfo() const { return _levelInfo; }
   std::vector<NetworkEvent> pollEvents();
 
   std::uint64_t droppedDatagrams() const;
@@ -112,6 +123,9 @@ private:
   std::unordered_map<std::uint32_t, RemoteEntity> _entities;
   std::unordered_map<std::uint32_t, Clock::time_point> _lastSeen;
   std::vector<rtype::protocol::PlayerState> _players;
+  rtype::protocol::GameStatus _gameStatus;
+  rtype::protocol::LevelInfo _levelInfo;
+  rtype::protocol::Connect _connectRequest;
   std::deque<NetworkEvent> _events;
 };
 

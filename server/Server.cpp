@@ -60,7 +60,7 @@ const ServerConfig& validated(const ServerConfig& config) {
 Server::Server(ServerConfig config)
     : _config(validated(config)), _socket(protocol::MAX_DATAGRAM_SIZE),
       _inbound(config.inboundCapacity), _sessions(config.maxPlayers),
-      _world(config.tickRate, config.seed, {}, {}, config.initialLevel) {}
+      _world(config.tickRate, config.seed, {}, config.content, config.initialLevel) {}
 
 Server::~Server() { stop(); }
 
@@ -158,12 +158,19 @@ void Server::tick(Clock::time_point now) {
     closeSession(session, protocol::LeaveReason::TimedOut);
   }
 
-  _sessions.forEach(
-      [this](Session& session) { _world.applyInput(session.entity, session.inputFlags); });
+  // By player id: a ship is replaced when a game restarts after a game over or a victory.
+  _sessions.forEach([this](Session& session) {
+    _world.applyPlayerInput(session.playerId, session.inputFlags);
+    session.entity = _world.ship(session.playerId);
+  });
   _world.step();
   broadcastChanges(_world.collectChanges());
   if (_world.tick() % _config.ticksPerSnapshot == 0) {
     broadcastSnapshot();
+  }
+  // Titles and story are sent when a level starts, then every second for whoever missed them.
+  if (_world.levelRevision() != _sentLevelRevision || _world.tick() % _config.tickRate == 0) {
+    broadcastLevelInfo();
   }
   if (_world.tick() % (DROP_REPORT_SECONDS * _config.tickRate) == 0) {
     logDrops();
@@ -177,8 +184,8 @@ void Server::handlePacket(const Incoming& incoming, Clock::time_point now) {
     ++_ignored; // flood: a real client sends a couple of packets per tick at most
     return;
   }
-  if (packet.header.type == protocol::PacketType::Connect) {
-    handleConnect(from, now);
+  if (const auto* connect = std::get_if<protocol::Connect>(&packet.payload)) {
+    handleConnect(from, *connect, now);
     return;
   }
   if (session == nullptr) {
@@ -204,7 +211,8 @@ void Server::handlePacket(const Incoming& incoming, Clock::time_point now) {
   }
 }
 
-void Server::handleConnect(const engine::network::Endpoint& from, Clock::time_point now) {
+void Server::handleConnect(const engine::network::Endpoint& from, const protocol::Connect& connect,
+                           Clock::time_point now) {
   // L'adresse UDP identifie la session ; un CONNECT répété ne crée pas un second joueur.
   const bool known = _sessions.find(from) != nullptr;
   auto* session = _sessions.join(from, now);
@@ -214,14 +222,22 @@ void Server::handleConnect(const engine::network::Endpoint& from, Clock::time_po
   }
   session->lastSeen = now;
   if (!known) {
+    // Only the first player of an empty server chooses: the others join the running game.
+    _world.requestGame(connect.mode, connect.difficulty);
     session->entity = _world.spawnPlayer(session->playerId);
+    const auto status = _world.gameStatus();
     Logger::info("player " + std::to_string(session->playerId + 1) + " joined from " +
-                 from.toString());
+                 from.toString() + " (" +
+                 (status.mode == protocol::GameMode::Story ? "story" : "endless") + ", level " +
+                 std::to_string(status.level) + ")");
   }
   // Sent again on a repeated CONNECT: the first ACCEPT may have been lost.
   sendTo(*session,
          protocol::Accept{session->playerId, static_cast<std::uint16_t>(_world.bounds().width),
                           static_cast<std::uint16_t>(_world.bounds().height), _config.tickRate});
+  // The newcomer sees the title card and the game state at once, not at the next broadcast.
+  sendTo(*session, _world.levelInfo());
+  sendTo(*session, _world.gameStatus());
 }
 
 void Server::closeSession(const Session& session, protocol::LeaveReason reason) {
@@ -246,6 +262,12 @@ void Server::broadcastSnapshot() {
     broadcast(protocol::EntityUpdate{_world.tick(), std::move(entities)});
   }
   broadcast(protocol::PlayerStatus{_world.playerStates()});
+  broadcast(_world.gameStatus());
+}
+
+void Server::broadcastLevelInfo() {
+  _sentLevelRevision = _world.levelRevision();
+  broadcast(_world.levelInfo());
 }
 
 void Server::sendTo(Session& session, const protocol::Payload& payload) {

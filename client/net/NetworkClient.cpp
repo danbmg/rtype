@@ -42,8 +42,10 @@ NetworkClient::NetworkClient() : _inbound(INBOUND_CAPACITY) {}
 
 NetworkClient::~NetworkClient() { disconnect(); }
 
-bool NetworkClient::connect(const std::string& host, std::uint16_t port) {
+bool NetworkClient::connect(const std::string& host, std::uint16_t port,
+                            protocol::GameMode mode, protocol::Difficulty difficulty) {
   disconnect();
+  _connectRequest = protocol::Connect{mode, difficulty};
   _state = ConnectionState::Disconnected;
   _error.clear();
   _versionMismatch = false;
@@ -72,13 +74,14 @@ bool NetworkClient::connect(const std::string& host, std::uint16_t port) {
   _state = ConnectionState::Connecting;
   _connectStarted = Clock::now();
   _lastConnectSent = _connectStarted;
-  send(protocol::Connect{});
+  send(_connectRequest);
   return true;
 }
 
 bool NetworkClient::connectBlocking(const std::string& host, std::uint16_t port,
-                                    std::chrono::milliseconds timeout) {
-  if (!connect(host, port)) {
+                                    std::chrono::milliseconds timeout, protocol::GameMode mode,
+                                    protocol::Difficulty difficulty) {
+  if (!connect(host, port, mode, difficulty)) {
     return false;
   }
   const auto deadline = Clock::now() + timeout;
@@ -111,6 +114,8 @@ void NetworkClient::closeSocket() {
   _entities.clear();
   _lastSeen.clear();
   _players.clear();
+  _gameStatus = {};
+  _levelInfo = {};
 }
 
 void NetworkClient::update() {
@@ -132,7 +137,7 @@ void NetworkClient::update() {
       fail(ConnectionState::Failed, "no answer from the server");
     } else if (now - _lastConnectSent >= CONNECT_RETRY_INTERVAL) {
       _lastConnectSent = now; // CONNECT or ACCEPT may have been lost: ask again
-      send(protocol::Connect{});
+      send(_connectRequest);
     }
     return;
   }
@@ -250,6 +255,10 @@ void NetworkClient::handlePacket(const protocol::Packet& packet, Clock::time_poi
           }
         } else if constexpr (std::is_same_v<T, protocol::PlayerStatus>) {
           _players = payload.players;
+        } else if constexpr (std::is_same_v<T, protocol::GameStatus>) {
+          _gameStatus = payload;
+        } else if constexpr (std::is_same_v<T, protocol::LevelInfo>) {
+          _levelInfo = payload;
         } else if constexpr (std::is_same_v<T, protocol::PlayerLeft>) {
           std::erase_if(_players, [&payload](const protocol::PlayerState& player) {
             return player.playerId == payload.playerId;
