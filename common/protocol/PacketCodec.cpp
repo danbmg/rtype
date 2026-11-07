@@ -23,6 +23,7 @@ bool isKnownType(std::uint8_t type) {
   case PacketType::Input:
   case PacketType::Ping:
   case PacketType::Disconnect:
+  case PacketType::SkipLevel:
   case PacketType::Accept:
   case PacketType::Reject:
   case PacketType::Pong:
@@ -104,6 +105,7 @@ struct PayloadWriter {
     writer.writeU8(toByte(connect.difficulty));
   }
   void operator()(const Disconnect&) const {}
+  void operator()(const SkipLevel& skip) const { writer.writeU16(skip.level); }
   void operator()(const Input& input) const { writer.writeU8(input.flags); }
   void operator()(const Ping& ping) const { writer.writeU32(ping.token); }
   void operator()(const Pong& pong) const { writer.writeU32(pong.token); }
@@ -233,7 +235,7 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
     }
     const auto mode = reader.readU8();
     const auto difficulty = reader.readU8();
-    if (mode > toByte(GameMode::Endless) || difficulty > toByte(Difficulty::Hard)) {
+    if (mode > toByte(GameMode::Endless) || difficulty > toByte(Difficulty::Tutorial)) {
       return DecodeError::InvalidValue;
     }
     payload = Connect{static_cast<GameMode>(mode), static_cast<Difficulty>(difficulty)};
@@ -243,6 +245,15 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
   case PacketType::Disconnect:
     payload = Disconnect{};
     return expect(0) ? DecodeError::None : DecodeError::SizeMismatch;
+
+  case PacketType::SkipLevel: {
+    if (!expect(2)) {
+      return DecodeError::SizeMismatch;
+    }
+    const SkipLevel skip{reader.readU16()};
+    payload = skip;
+    return skip.level != 0 ? DecodeError::None : DecodeError::InvalidValue; // levels start at 1
+  }
 
   case PacketType::Input: {
     if (!expect(1)) {
@@ -380,7 +391,7 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
     status.bossHealth = reader.readU16();
     status.bossMaxHealth = reader.readU16();
     status.countdown = reader.readU8();
-    if (mode > toByte(GameMode::Endless) || difficulty > toByte(Difficulty::Hard) ||
+    if (mode > toByte(GameMode::Endless) || difficulty > toByte(Difficulty::Tutorial) ||
         phase > toByte(GamePhase::GameOver) || status.wave > status.waveCount ||
         status.bossHealth > status.bossMaxHealth ||
         (status.levelCount != 0 && status.level > status.levelCount)) {
@@ -435,6 +446,8 @@ PacketType packetTypeOf(const Payload& payload) {
           return PacketType::Ping;
         } else if constexpr (std::is_same_v<T, Disconnect>) {
           return PacketType::Disconnect;
+        } else if constexpr (std::is_same_v<T, SkipLevel>) {
+          return PacketType::SkipLevel;
         } else if constexpr (std::is_same_v<T, Accept>) {
           return PacketType::Accept;
         } else if constexpr (std::is_same_v<T, Reject>) {

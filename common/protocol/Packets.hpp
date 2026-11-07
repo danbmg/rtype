@@ -8,13 +8,14 @@
 
 // Contract shared by the client and the server. Version 2 added equipment and pickups; version 3
 // adds game modes and difficulty (CONNECT), the game state (GAME_STATUS), level titles and story
-// (LEVEL_INFO), new enemy kinds and player flags. Any change is a dedicated PR approved by the
+// (LEVEL_INFO), new enemy kinds and player flags. Version 4 adds the tutorial difficulty and
+// SKIP_LEVEL. Any change is a dedicated PR approved by the
 // whole team and updates docs/protocol/rfc.md in the same PR. Byte layouts are given in the RFC;
 // every multi-byte field is big-endian and floats are IEEE 754 binary32.
 namespace rtype::protocol {
 
 constexpr std::uint16_t MAGIC = 0x5254; // "RT"
-constexpr std::uint8_t VERSION = 3;
+constexpr std::uint8_t VERSION = 4;
 constexpr std::uint16_t DEFAULT_PORT = 4242;
 
 // Tous les échanges suivent ce même en-tête, puis un payload propre au type de paquet.
@@ -37,6 +38,8 @@ enum class PacketType : std::uint8_t {
   Input = 0x02,
   Ping = 0x03,
   Disconnect = 0x04,
+  // Game command, client -> server
+  SkipLevel = 0x05,
   // Session, server -> client
   Accept = 0x08,
   Reject = 0x09,
@@ -86,7 +89,10 @@ enum class EntityKind : std::uint8_t {
 constexpr std::uint8_t LAST_ENTITY_KIND = static_cast<std::uint8_t>(EntityKind::BossMissile);
 
 enum class GameMode : std::uint8_t { Story = 0, Endless = 1 };
-enum class Difficulty : std::uint8_t { Easy = 0, Normal = 1, Hard = 2 };
+// Tutorial is for the story only (an endless game asked in tutorial is played in normal): enemies
+// as in easy, lives never drop below their starting value (no game over), and the server
+// honours SKIP_LEVEL.
+enum class Difficulty : std::uint8_t { Easy = 0, Normal = 1, Hard = 2, Tutorial = 3 };
 // Lobby: nobody plays yet. Intro: level title card, no enemy. StageClear: last wave of a level
 // cleared, next level soon. Victory and GameOver end the game; it restarts after the countdown.
 enum class GamePhase : std::uint8_t {
@@ -138,6 +144,11 @@ struct Ping {              // 4 bytes
   std::uint32_t token = 0; // echoed back in Pong
 };
 struct Disconnect {}; // empty payload
+struct SkipLevel {    // 2 bytes, honoured in a tutorial game only
+  // The level the client sees (GAME_STATUS). The server skips only if it is still the current
+  // level, so a duplicated or late datagram never skips a second level.
+  std::uint16_t level = 0;
+};
 
 // ---- Server -> client -------------------------------------------------------------------
 struct Accept {                 // 6 bytes
@@ -217,9 +228,9 @@ constexpr std::size_t MAX_SPAWNS_PER_PACKET = (MAX_PAYLOAD_SIZE - 2) / ENTITY_ST
 constexpr std::size_t MAX_UPDATES_PER_PACKET = (MAX_PAYLOAD_SIZE - 6) / ENTITY_STATE_SIZE;
 constexpr std::size_t MAX_REMOVALS_PER_PACKET = (MAX_PAYLOAD_SIZE - 2) / ENTITY_REMOVAL_SIZE;
 
-using Payload = std::variant<Connect, Input, Ping, Disconnect, Accept, Reject, Pong, EntitySpawn,
-                             EntityUpdate, EntityDestroy, PlayerStatus, PlayerLeft, GameStatus,
-                             LevelInfo>;
+using Payload =
+    std::variant<Connect, Input, Ping, Disconnect, SkipLevel, Accept, Reject, Pong, EntitySpawn,
+                 EntityUpdate, EntityDestroy, PlayerStatus, PlayerLeft, GameStatus, LevelInfo>;
 
 struct Packet {
   Header header;

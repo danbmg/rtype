@@ -1,8 +1,8 @@
-# R-Type Network Protocol — version 3
+# R-Type Network Protocol — version 4
 
 | | |
 | --- | --- |
-| Status | Version 3: game modes, game state and level texts on top of `contracts-v1` |
+| Status | Version 4: tutorial difficulty and SKIP_LEVEL on top of version 3 |
 | Source of truth | `common/protocol/Packets.hpp`, `common/protocol/PacketCodec.cpp` |
 | Author | danbmg |
 
@@ -17,12 +17,12 @@ The key words **MUST**, **MUST NOT**, **SHOULD** and **MAY** are to be read as i
 - The server is the **authority**. Clients send their inputs; the server runs the game and
   reports what happens: entities that appear, move and disappear, player lives and scores, the
   current level, its boss and the end of the game. A client never decides a hit, a death, a
-  spawn, a score, a level change or a victory.
+  spawn, a score, a level change or a victory: SKIP_LEVEL is a request the server may ignore.
 - Every message travels over **UDP**. There is no TCP connection.
 - The protocol is **binary**: fields have a fixed size and a fixed order, with no separators.
   The only text is the title and story of a level (LEVEL_INFO), sent as length-prefixed ASCII.
 - UDP can lose, duplicate and reorder datagrams. The protocol does not resend anything in
-  version 3. It stays correct anyway because the server sends the **full state of the world**
+  version 4. It stays correct anyway because the server sends the **full state of the world**
   and of the game 30 times per second, and the level texts every second: a lost datagram is
   corrected by the next one.
 
@@ -31,6 +31,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD** and **MAY** are to be read as i
 | 1 | `contracts-v1`: session, inputs, entities, player status |
 | 2 | equipment in PLAYER_STATUS, boss and pickup entity kinds |
 | 3 | mode and difficulty in CONNECT, player flags, GAME_STATUS, LEVEL_INFO, new enemy kinds, shield and Cup pickups |
+| 4 | tutorial difficulty (story only) in CONNECT and GAME_STATUS, SKIP_LEVEL |
 
 ## 2. Transport
 
@@ -70,7 +71,7 @@ Every packet starts with this 10-byte header.
 | Offset | Size | Field | Value |
 | --- | --- | --- | --- |
 | 0 | `u16` | magic | `0x5254` (ASCII `"RT"`) |
-| 2 | `u8` | version | `2` |
+| 2 | `u8` | version | `4` |
 | 3 | `u8` | type | packet type, see section 5 |
 | 4 | `u32` | sequence | incremented by the sender for every datagram it sends, starting at any value |
 | 8 | `u16` | payload size | number of bytes after the header |
@@ -90,6 +91,7 @@ when `(int32)(a - b) > 0`.
 | `0x02` | INPUT | client → server | 1 |
 | `0x03` | PING | client → server | 4 |
 | `0x04` | DISCONNECT | client → server | 0 |
+| `0x05` | SKIP_LEVEL | client → server | 2 |
 | `0x08` | ACCEPT | server → client | 6 |
 | `0x09` | REJECT | server → client | 1 |
 | `0x0A` | PONG | server → client | 4 |
@@ -110,7 +112,7 @@ Any other code is invalid.
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u8` | game mode: `0` story, `1` endless |
-| 1 | `u8` | difficulty: `0` easy, `1` normal, `2` hard |
+| 1 | `u8` | difficulty: `0` easy, `1` normal, `2` hard, `3` tutorial |
 
 Asks to join the game. The client repeats it every 250 ms until it receives ACCEPT or REJECT,
 and gives up after 3 seconds.
@@ -118,6 +120,11 @@ and gives up after 3 seconds.
 The mode and the difficulty are a **wish**: they are applied only when this client is the first
 player of an empty server, which then starts a new game with them. A client joining a game in
 progress plays that game, whatever it asked for; GAME_STATUS tells it which game it is.
+
+The tutorial is for the story only. Its enemies are those of easy, a ship never has fewer lives
+than at the start (a lost life comes back on the same tick, so no game over), and the server
+honours SKIP_LEVEL (6.5). A first player
+asking for endless in tutorial gets endless in normal.
 
 ### 6.2 INPUT (`0x02`), client → server
 
@@ -156,7 +163,29 @@ Empty payload. The client leaves. The server removes its ship and sends PLAYER_L
 `Quit` to the other clients. A client SHOULD send it when the player quits; one that cannot
 (crash) is detected by the timeout of section 7.4.
 
-### 6.5 ACCEPT (`0x08`), server → client
+### 6.5 SKIP_LEVEL (`0x05`), client → server
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | `u16` | level to skip, from 1: the level the client sees in GAME_STATUS |
+
+Asks the server to end the current level and start the next one. It is a **request**: the server
+honours it only when all of these hold, and otherwise ignores it without answering:
+
+- the game is a story in difficulty `tutorial` (6.1);
+- the game is running: not in the lobby, nor in the VICTORY or GAME_OVER countdown;
+- `level` is still the current level.
+
+The last rule makes the packet idempotent: a duplicated or late SKIP_LEVEL names a level that is
+already behind, so one key press never skips two levels. Any player of the game may send it, and
+the level changes for everyone: enemies, projectiles and pickups are removed, ships, lives and
+scores stay, and the next level starts with its INTRO. On the final level of the story, the
+server goes to VICTORY instead.
+
+SKIP_LEVEL is neither acknowledged nor resent. The client sees the new level in GAME_STATUS and
+LEVEL_INFO; if the datagram was lost, the player presses the key again.
+
+### 6.6 ACCEPT (`0x08`), server → client
 
 | Offset | Size | Field | Rule |
 | --- | --- | --- | --- |
@@ -169,19 +198,19 @@ The client is now in the game. Its ship is the PLAYER entity whose player id mat
 repeats CONNECT after it was accepted (the first ACCEPT was lost), the server answers with the
 same ACCEPT again.
 
-### 6.6 REJECT (`0x09`), server → client
+### 6.7 REJECT (`0x09`), server → client
 
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u8` | reason: `1` server full (4 players already), `2` version mismatch |
 
-### 6.7 PONG (`0x0A`), server → client
+### 6.8 PONG (`0x0A`), server → client
 
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u32` | token copied from the PING |
 
-### 6.8 Entity state (14 bytes, used by ENTITY_SPAWN and ENTITY_UPDATE)
+### 6.9 Entity state (14 bytes, used by ENTITY_SPAWN and ENTITY_UPDATE)
 
 | Offset | Size | Field | Rule |
 | --- | --- | --- | --- |
@@ -194,7 +223,7 @@ same ACCEPT again.
 The player id is the owner of a PLAYER ship and the shooter of a PLAYER_MISSILE (so a client can
 draw them in that player's colour). It is `0xFF` for Bydos, bosses, enemy missiles, and pickups.
 
-### 6.9 ENTITY_SPAWN (`0x10`), server → client
+### 6.10 ENTITY_SPAWN (`0x10`), server → client
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -205,7 +234,7 @@ Entities that appeared during the last tick: a Bydos arrived, someone fired, a p
 This is an event, sent once; use it to play a sound. The entity also appears in the next
 snapshots.
 
-### 6.10 ENTITY_UPDATE (`0x11`), server → client — the snapshot
+### 6.11 ENTITY_UPDATE (`0x11`), server → client — the snapshot
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -217,7 +246,7 @@ The position of **every** entity in the world, sent every 2 ticks (30 times per 
 ticks per second). A world with more than 84 entities is split over several ENTITY_UPDATE
 datagrams with the same tick.
 
-### 6.11 ENTITY_DESTROY (`0x12`), server → client
+### 6.12 ENTITY_DESTROY (`0x12`), server → client
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -231,7 +260,7 @@ Each removal:
 | 0 | `u32` | entity id |
 | 4 | `u8` | reason: `1` killed (destroyed on screen: show an explosion), `2` left the screen |
 
-### 6.12 PLAYER_STATUS (`0x13`), server → client
+### 6.13 PLAYER_STATUS (`0x13`), server → client
 
 | Offset | Size | Field |
 | --- | --- | --- |
@@ -243,7 +272,7 @@ Each player state:
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u8` | player id, 0 to 3 |
-| 1 | `u8` | lives left; 0 means game over for this player |
+| 1 | `u8` | lives left; 0 means game over for this player. Never below the starting value in a tutorial game |
 | 2 | `u8` | health in the current life |
 | 3 | `u32` | score |
 | 7 | `u8` | weapon: 0 standard, 1 double, 2 spread, 3 heavy |
@@ -254,24 +283,25 @@ Sent with every snapshot, for every connected player: this is what the HUD shows
 
 A shield absorbs the next enemy shot or collision, then disappears (or after 12 seconds). A ship
 that has just lost a life is invulnerable for 2 seconds: enemy shots fly through it. Clients
-show both (a bubble, a blinking ship) but never decide them. Pickups are collected through
+show both (a bubble, a blinking ship) but never decide them. The invulnerable flag turning on
+is also how a client sees a death in a tutorial game, where the lost life is already back. Pickups are collected through
 server-side overlap checks; clients cannot grant themselves items.
 
-### 6.13 PLAYER_LEFT (`0x14`), server → client
+### 6.14 PLAYER_LEFT (`0x14`), server → client
 
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u8` | player id, 0 to 3 |
 | 1 | `u8` | reason: `1` quit (DISCONNECT), `2` timed out (crashed or network lost) |
 
-### 6.14 GAME_STATUS (`0x15`), server → client
+### 6.15 GAME_STATUS (`0x15`), server → client
 
 Sent with every snapshot (30 times per second): where the game stands.
 
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | `u8` | game mode: `0` story, `1` endless |
-| 1 | `u8` | difficulty: `0` easy, `1` normal, `2` hard |
+| 1 | `u8` | difficulty: `0` easy, `1` normal, `2` hard, `3` tutorial |
 | 2 | `u8` | phase, see below |
 | 3 | `u16` | level, from 1 (0 in the lobby) |
 | 5 | `u16` | number of levels of the story; `0` in endless mode |
@@ -291,10 +321,10 @@ Sent with every snapshot (30 times per second): where the game stands.
 | VICTORY | 5 | the story is completed: the Summoner's Cup was caught | the victory screen; a new game starts after the countdown |
 | GAME_OVER | 6 | every player is out of lives | the game over screen; the game restarts after the countdown |
 
-Valid values: mode ≤ 1, difficulty ≤ 2, phase ≤ 6, wave ≤ number of waves, boss health ≤ boss
+Valid values: mode ≤ 1, difficulty ≤ 3, phase ≤ 6, wave ≤ number of waves, boss health ≤ boss
 maximum health, and level ≤ number of levels when that number is not 0.
 
-### 6.15 LEVEL_INFO (`0x16`), server → client
+### 6.16 LEVEL_INFO (`0x16`), server → client
 
 Sent when a level starts and then once per second, so a client that lost it or joined late gets
 it quickly.
@@ -342,6 +372,8 @@ stateDiagram-v2
     Playing --> StageClear: last wave of the level cleared
     StageClear --> Intro: next level
     Playing --> Victory: story completed (Cup caught)
+    Playing --> Intro: SKIP_LEVEL (tutorial)
+    Playing --> Victory: SKIP_LEVEL on the final level (tutorial)
     Playing --> GameOver: every player out of lives
     BossFight --> GameOver: every player out of lives
     Victory --> Intro: countdown over, new game
@@ -352,6 +384,9 @@ stateDiagram-v2
 
 On a restart (after GAME_OVER or VICTORY), every connected player gets a new ship with full
 lives and a score of 0: ship entity ids change, as announced by ENTITY_DESTROY and ENTITY_SPAWN.
+In a tutorial game, SKIP_LEVEL (6.5) also leaves INTRO, BOSS_FIGHT and STAGE_CLEAR the same
+way; GAME_OVER never happens since no life is lost.
+
 A player out of lives while the others still play MAY reconnect (DISCONNECT then CONNECT) to get
 a new ship in the game in progress.
 
@@ -444,11 +479,11 @@ SHOULD stop and report that the server is incompatible.
 
 Kinds describe how an entity **looks**, not how it behaves: the server's content files can
 create many enemy types (speed, health, movement) that share one kind. Codes above 18 are invalid
-in version 3.
+in version 4.
 
 ### 8.2 Coordinates
 
-- The world is `world width × world height` units (800 × 600 in version 3), sent in ACCEPT.
+- The world is `world width × world height` units (800 × 600 in version 4), sent in ACCEPT.
 - The origin is the top-left corner of the screen; x grows to the right, y grows **downwards**.
 - A position is the top-left corner of the entity.
 - Entities can be slightly outside the world: Bydos enter from the right edge and leave on the
@@ -462,14 +497,15 @@ value:
 
 1. size: at least 10 bytes (header) and at most 1200 bytes;
 2. magic is `0x5254`;
-3. version is `3` (see 7.6);
+3. version is `4` (see 7.6);
 4. type is one of section 5;
 5. payload size equals the number of bytes actually received after the header;
 6. for lists, the count is within its maximum and `count × entry size` equals the remaining
    bytes. Memory is reserved only after this check;
 7. every value is in range: known enum codes, input bits 5–7 at zero, player flag bits 2–7 at
    zero, player ids 0–3 (or `0xFF` where allowed), finite floats, width, height and tick rate
-   above zero, the GAME_STATUS consistency rules of 6.14, and the LEVEL_INFO text rules of 6.15.
+   above zero, a SKIP_LEVEL level above zero, the GAME_STATUS consistency rules of 6.15, and the
+   LEVEL_INFO text rules of 6.16.
 
 A datagram that fails any check MUST be dropped silently (the server counts it). It MUST NOT
 crash the receiver, make it allocate memory from an unchecked size, or make it read outside the
@@ -488,7 +524,7 @@ A client accepts datagrams from the server's address only.
 | Name | Value |
 | --- | --- |
 | Magic | `0x5254` |
-| Version | `3` |
+| Version | `4` |
 | Default port | 4242 |
 | Header size | 10 bytes |
 | Maximum datagram size | 1200 bytes |
@@ -509,21 +545,22 @@ Bytes in hexadecimal; `|` separates the header from the payload.
 
 | Packet | Bytes |
 | --- | --- |
-| CONNECT: story, normal, sequence 0 | `52 54 03 01 00 00 00 00 00 02 \| 00 01` |
-| ACCEPT: player 0, 800 × 600, 60 ticks/s | `52 54 03 08 00 00 00 00 00 06 \| 00 03 20 02 58 3C` |
-| INPUT: up + fire, sequence 7 | `52 54 03 02 00 00 00 07 00 01 \| 11` |
-| PING: token 1500 | `52 54 03 03 00 00 00 08 00 04 \| 00 00 05 DC` |
-| ENTITY_UPDATE: tick 120, ship 5 of player 0 at (60, 111.5) | `52 54 03 11 00 00 00 2A 00 14 \| 00 00 00 78 00 01 00 00 00 05 01 00 42 70 00 00 42 DF 00 00` |
-| ENTITY_DESTROY: entity 17 killed | `52 54 03 12 00 00 00 2B 00 07 \| 00 01 00 00 00 11 01` |
-| PLAYER_STATUS: player 0, 3 lives, 2 health, score 1500, shield up | `52 54 03 13 00 00 00 2C 00 0C \| 01 00 03 02 00 00 05 DC 00 00 00 01` |
-| GAME_STATUS: story, normal, boss fight, level 5/10, wave 3/3, boss 120/150 | `52 54 03 15 00 00 00 2E 00 0E \| 00 01 03 00 05 00 0A 03 03 00 78 00 96 00` |
-| LEVEL_INFO: level 1, theme 0, title "Go!", story "Hi" | `52 54 03 16 00 00 00 2F 00 0B \| 00 01 00 03 47 6F 21 00 02 48 69` |
-| PLAYER_LEFT: player 2 timed out | `52 54 03 14 00 00 00 2D 00 02 \| 02 02` |
-| REJECT: server full | `52 54 03 09 00 00 00 00 00 01 \| 01` |
+| CONNECT: story, normal, sequence 0 | `52 54 04 01 00 00 00 00 00 02 \| 00 01` |
+| ACCEPT: player 0, 800 × 600, 60 ticks/s | `52 54 04 08 00 00 00 00 00 06 \| 00 03 20 02 58 3C` |
+| INPUT: up + fire, sequence 7 | `52 54 04 02 00 00 00 07 00 01 \| 11` |
+| SKIP_LEVEL: level 3, sequence 48 | `52 54 04 05 00 00 00 30 00 02 \| 00 03` |
+| PING: token 1500 | `52 54 04 03 00 00 00 08 00 04 \| 00 00 05 DC` |
+| ENTITY_UPDATE: tick 120, ship 5 of player 0 at (60, 111.5) | `52 54 04 11 00 00 00 2A 00 14 \| 00 00 00 78 00 01 00 00 00 05 01 00 42 70 00 00 42 DF 00 00` |
+| ENTITY_DESTROY: entity 17 killed | `52 54 04 12 00 00 00 2B 00 07 \| 00 01 00 00 00 11 01` |
+| PLAYER_STATUS: player 0, 3 lives, 2 health, score 1500, shield up | `52 54 04 13 00 00 00 2C 00 0C \| 01 00 03 02 00 00 05 DC 00 00 00 01` |
+| GAME_STATUS: story, normal, boss fight, level 5/10, wave 3/3, boss 120/150 | `52 54 04 15 00 00 00 2E 00 0E \| 00 01 03 00 05 00 0A 03 03 00 78 00 96 00` |
+| LEVEL_INFO: level 1, theme 0, title "Go!", story "Hi" | `52 54 04 16 00 00 00 2F 00 0B \| 00 01 00 03 47 6F 21 00 02 48 69` |
+| PLAYER_LEFT: player 2 timed out | `52 54 04 14 00 00 00 2D 00 02 \| 02 02` |
+| REJECT: server full | `52 54 04 09 00 00 00 00 00 01 \| 01` |
 
 These bytes are produced by the reference encoder; `tests/network/PacketCodecTests.cpp` checks
-the header layout and the version 3 examples (CONNECT, PLAYER_STATUS, GAME_STATUS, LEVEL_INFO)
-byte for byte.
+the header layout and the examples for CONNECT, PLAYER_STATUS, GAME_STATUS, LEVEL_INFO and
+SKIP_LEVEL byte for byte.
 
 ## 12. Security considerations
 
@@ -531,7 +568,7 @@ byte for byte.
   on the path can read or forge packets. This is acceptable for a LAN game prototype; see the
   comparative study for what a public deployment would need.
 - **Address spoofing.** UDP source addresses can be forged. An attacker who knows a player's
-  address and port could send INPUT or DISCONNECT in their name. A forged CONNECT also makes the
+  address and port could send INPUT, SKIP_LEVEL or DISCONNECT in their name. A forged CONNECT also makes the
   server send the game state to the forged address until the 3-second timeout: a small
   amplification, bounded by the 4 player slots. A session token returned in ACCEPT and required
   in every later packet would close both holes (a future version).

@@ -65,6 +65,11 @@ public:
   // Sent when it changes, and repeated every 33 ms otherwise so a lost datagram costs little.
   void sendInput(const InputState& input);
 
+  // Asks the server to skip the level gameStatus() shows. Only a tutorial game honours it, and
+  // the server alone decides: the next GAME_STATUS tells whether the level changed. Best effort,
+  // not resent: if it is lost, the player presses the key again.
+  void requestSkipLevel();
+
   ConnectionState state() const { return _state; }
   bool isConnected() const { return _state == ConnectionState::Connected; }
   const std::string& error() const { return _error; }
