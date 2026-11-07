@@ -1,0 +1,54 @@
+// Enemies and bosses of R-Type: Save the Summoner's Cup.
+// Every number is in world units (the screen is 800 x 600) and seconds.
+// Validate after any change: ./r-type_server --check-content
+{
+  "enemies": [
+    // The basic Bydos fighter: flies straight, shoots now and then.
+    { "name": "drone", "visual": "bydos", "health": 1, "points": 100, "size": [32, 24],
+      "movement": "straight", "speed": 90, "fireRate": 0.25, "shotSpeed": 220, "drop": 0.12 },
+    // Slower, tougher, fires pairs of shots.
+    { "name": "heavy-drone", "visual": "bydos", "health": 3, "points": 250, "size": [32, 24],
+      "movement": "straight", "speed": 60, "fireRate": 0.5, "burst": 2, "shotSpeed": 240,
+      "drop": 0.3 },
+    // Rides a sine wave: amplitude is the height of the wave, frequency its speed.
+    { "name": "waver", "visual": "waver", "health": 2, "points": 150, "size": [30, 30],
+      "movement": "sine", "speed": 85, "amplitude": 70, "frequency": 0.6, "fireRate": 0.2,
+      "drop": 0.15 },
+    // Bounces up and down, changing direction `frequency` times per second.
+    { "name": "zigzag", "visual": "waver", "health": 2, "points": 175, "size": [30, 30],
+      "movement": "zigzag", "speed": 110, "frequency": 1.2, "fireRate": 0.15, "drop": 0.15 },
+    // Kamikaze: never shoots, dives at the closest ship.
+    { "name": "charger", "visual": "charger", "health": 1, "points": 120, "size": [28, 28],
+      "movement": "chase", "speed": 150, "drop": 0.1 },
+    // Gun platform drifting with the scenery: volleys of three aimed shots.
+    { "name": "turret", "visual": "turret", "health": 5, "points": 400, "size": [32, 32],
+      "movement": "turret", "speed": 40, "fireRate": 0.45, "burst": 3, "shotSpeed": 230,
+      "drop": 0.35 }
+  ],
+
+  // A boss changes phase when its health drops to `below` (1.0 = full health) and cycles
+  // through the attacks of that phase, one every `interval` seconds.
+  "bosses": [
+    { "name": "gatekeeper", "visual": "boss", "health": 150, "points": 5000, "size": [120, 96],
+      "phases": [
+        { "below": 1.0, "attacks": ["aimed", "spread"], "interval": 1.5, "bullets": 5,
+          "shotSpeed": 230, "moveSpeed": 50 },
+        { "below": 0.6, "attacks": ["spread", "summon", "aimed"], "interval": 1.2, "bullets": 7,
+          "summon": "charger", "moveSpeed": 80 },
+        { "below": 0.3, "attacks": ["ring", "aimed", "wall"], "interval": 1.0, "bullets": 12,
+          "shotSpeed": 260, "moveSpeed": 110 }
+      ] },
+    // The thief of the Summoner's Cup. "trophy": the Cup falls when it dies; picking it up
+    // wins the story.
+    { "name": "cup-thief", "visual": "final-boss", "health": 280, "points": 20000,
+      "size": [150, 120], "trophy": true,
+      "phases": [
+        { "below": 1.0, "attacks": ["spread", "aimed", "wall"], "interval": 1.3, "bullets": 7,
+          "moveSpeed": 60 },
+        { "below": 0.65, "attacks": ["ring", "summon", "aimed"], "interval": 1.1, "bullets": 14,
+          "summon": "waver", "moveSpeed": 90 },
+        { "below": 0.3, "attacks": ["wall", "ring", "spread", "summon", "aimed"], "interval": 0.85,
+          "bullets": 16, "summon": "charger", "shotSpeed": 280, "moveSpeed": 130 }
+      ] }
+  ]
+}

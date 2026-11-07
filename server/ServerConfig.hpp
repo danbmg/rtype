@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "common/protocol/Packets.hpp"
+#include "game/Content.hpp"
 
 namespace server {
 
@@ -16,7 +17,9 @@ struct ServerConfig {
   std::chrono::milliseconds clientTimeout{rtype::protocol::TIMEOUT_MS};
   std::size_t inboundCapacity = 4096;           // queued datagrams before new ones are dropped
   std::uint32_t maxPacketsPerClientPerTick = 8; // more is a flood: the rest is dropped
+  std::uint32_t initialLevel = 1;               // positive campaign level
   std::uint32_t seed = 0;                       // enemy waves
+  game::GameContent content;                    // levels, enemies, bosses (assets/levels)
 };
 
 } // namespace server

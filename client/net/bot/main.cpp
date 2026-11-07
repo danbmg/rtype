@@ -1,6 +1,8 @@
 // r-type_bot: headless test clients. Each bot connects through NetworkClient, flies at random,
 // fires, and reports what it sees once per second. Used to load the server without a window.
+#include <array>
 #include <charconv>
+#include <cmath>
 #include <chrono>
 #include <csignal>
 #include <iostream>
@@ -34,6 +36,8 @@ struct Options {
   std::uint16_t port = rtype::protocol::DEFAULT_PORT;
   int bots = 1;
   int seconds = 10; // 0: until Ctrl+C
+  rtype::protocol::GameMode mode = rtype::protocol::GameMode::Story;
+  bool smart = false; // aim at enemies, dodge shots and go for the Cup instead of flying at random
 };
 
 struct Bot {
@@ -49,7 +53,9 @@ void printUsage(std::ostream& output) {
             "  -h host     server address (default 127.0.0.1)\n"
             "  -p port     server UDP port (default 4242)\n"
             "  -n bots     number of bots, 1 to 8 (default 1; more than 4 tests REJECT)\n"
-            "  -d seconds  run time, 0 for until Ctrl+C (default 10)\n";
+            "  -d seconds  run time, 0 for until Ctrl+C (default 10)\n"
+            "  -m mode     story or endless, if the bots start the game (default story)\n"
+            "  -b style    random (default) or smart: aims, dodges and catches the Cup\n";
 }
 
 std::optional<int> parseInt(std::string_view text, int min, int max) {
@@ -89,6 +95,11 @@ std::optional<Options> parseOptions(int argc, char** argv) {
         return std::nullopt;
       }
       options.seconds = *seconds;
+    } else if (flag == "-b" && (value == "random" || value == "smart")) {
+      options.smart = value == "smart";
+    } else if (flag == "-m" && (value == "story" || value == "endless")) {
+      options.mode = value == "story" ? rtype::protocol::GameMode::Story
+                                      : rtype::protocol::GameMode::Endless;
     } else {
       return std::nullopt;
     }
@@ -118,6 +129,60 @@ void handleEvents(Bot& bot) {
   }
 }
 
+// Smart style: line up with the closest enemy and fire, step aside from incoming shots, and fly
+// into the Summoner's Cup when it appears. Uses only what any client sees: entity positions.
+client::net::InputState pilot(const client::net::NetworkClient& network) {
+  using rtype::protocol::EntityKind;
+  client::net::InputState input;
+  input.fire = true;
+  const client::net::RemoteEntity* ship = nullptr;
+  for (const auto& [id, entity] : network.entities()) {
+    if (entity.kind == EntityKind::Player && entity.playerId == network.playerId()) {
+      ship = &entity;
+    }
+  }
+  if (ship == nullptr) {
+    return input;
+  }
+  const float shipX = ship->x + 16.0F;
+  const float shipY = ship->y + 8.0F;
+  float targetX = 120.0F + static_cast<float>(network.playerId()) * 40.0F;
+  float targetY = shipY;
+  float bestDistance = 1e9F;
+  float threat = 0.0F;
+  for (const auto& [id, entity] : network.entities()) {
+    const bool enemy = entity.kind == EntityKind::Bydos || entity.kind == EntityKind::Waver ||
+                       entity.kind == EntityKind::Charger || entity.kind == EntityKind::Turret ||
+                       entity.kind == EntityKind::Boss || entity.kind == EntityKind::FinalBoss;
+    const bool big = entity.kind == EntityKind::Boss || entity.kind == EntityKind::FinalBoss;
+    if (entity.kind == EntityKind::Trophy) {
+      targetX = entity.x + 20.0F;
+      targetY = entity.y + 20.0F;
+      bestDistance = -1.0F; // nothing matters more
+    } else if (enemy && bestDistance >= 0.0F && entity.x < 790.0F) {
+      const float centreY = entity.y + (big ? 48.0F : 12.0F);
+      const float distance = std::abs(centreY - shipY) + (entity.x - shipX) * 0.2F;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        targetY = centreY;
+      }
+    } else if ((entity.kind == EntityKind::EnemyMissile ||
+                entity.kind == EntityKind::BossMissile) &&
+               entity.x > shipX - 20.0F && entity.x < shipX + 140.0F &&
+               std::abs(entity.y - shipY) < 26.0F) {
+      threat = entity.y < shipY ? 1.0F : -1.0F; // step away from the shot
+    }
+  }
+  if (threat != 0.0F && bestDistance >= 0.0F) {
+    targetY = shipY + threat * 60.0F;
+  }
+  input.up = targetY < shipY - 6.0F;
+  input.down = targetY > shipY + 6.0F;
+  input.left = targetX < shipX - 8.0F;
+  input.right = targetX > shipX + 8.0F;
+  return input;
+}
+
 void report(const Bot& bot) {
   const auto& network = *bot.network;
   std::string line = "bot " + std::to_string(bot.number) + " (player " +
@@ -129,6 +194,16 @@ void report(const Bot& bot) {
     if (player.playerId == network.playerId()) {
       line += ", lives " + std::to_string(player.lives) + ", score " + std::to_string(player.score);
     }
+  }
+  constexpr std::array PHASES{"lobby", "intro", "playing", "boss fight", "stage clear",
+                              "victory", "game over"};
+  const auto& status = network.gameStatus();
+  line += " | level " + std::to_string(status.level) + " wave " + std::to_string(status.wave) +
+          "/" + std::to_string(status.waveCount) + ", " +
+          PHASES.at(static_cast<std::size_t>(status.phase));
+  if (status.bossMaxHealth > 0) {
+    line += ", boss " + std::to_string(status.bossHealth) + "/" +
+            std::to_string(status.bossMaxHealth);
   }
   Logger::info(line);
 }
@@ -147,7 +222,7 @@ int main(int argc, char** argv) {
   std::vector<Bot> bots;
   for (int number = 1; number <= options->bots; ++number) {
     Bot bot{std::make_unique<client::net::NetworkClient>(), {}, number};
-    if (bot.network->connectBlocking(options->host, options->port)) {
+    if (bot.network->connectBlocking(options->host, options->port, 3s, options->mode)) {
       Logger::info("bot " + std::to_string(number) + " connected as player " +
                    std::to_string(bot.network->playerId() + 1));
       bots.push_back(std::move(bot));
@@ -171,7 +246,9 @@ int main(int argc, char** argv) {
     const bool turn = now >= nextTurn;
     for (auto& bot : bots) {
       bot.network->update();
-      if (turn) {
+      if (options->smart) {
+        bot.input = pilot(*bot.network);
+      } else if (turn) {
         bot.input = {coin(random), coin(random), coin(random), coin(random), coin(random)};
       }
       bot.network->sendInput(bot.input);

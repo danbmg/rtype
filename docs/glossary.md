@@ -17,14 +17,14 @@ Terms used across this site, in alphabetical order, with where they show up in R
 | **Fixed timestep** | the simulation advances by equal steps of time, whatever the machine speed | 60 ticks per second on the server |
 | **Head-of-line blocking** | with TCP, one lost segment holds back all the data behind it until it is resent | the main reason we use UDP |
 | **Heartbeat** | a small message sent regularly to prove a peer is still alive | PING every second; silence for 3 s means a timeout |
-| **Interpolation** | drawing an entity between two received positions to smooth its movement | not done yet, part 2 |
+| **Interpolation** | drawing an entity between two received positions to smooth its movement | not done yet |
 | **Magic number** | fixed bytes at the start of every packet, to reject data that is not ours | `0x5254` ("RT") |
 | **Mermaid** | a text format for diagrams, drawn by this site and by GitHub | every diagram of this site |
 | **MkDocs** | the tool that turns the Markdown files of `docs/` into this website | with the Material theme |
 | **Mutex** | a lock that lets only one thread at a time touch shared data | inside `ThreadSafeQueue` |
 | **netem** | a Linux tool to add loss, delay or bandwidth limits to a network interface | to test the game on a bad network |
 | **Payload** | the part of a packet after the header | e.g. 1 byte of key flags for INPUT |
-| **Prediction** | moving the local ship at once, before the server confirms, then correcting | not done yet, part 2 |
+| **Prediction** | moving the local ship at once, before the server confirms, then correcting | not done yet |
 | **RFC** | "request for comments": the classic format of internet protocol specifications | our [Protocol RFC](protocol/rfc.md) |
 | **Sequence number** | a counter in each packet, incremented by its sender | lets the server ignore an INPUT older than the last one |
 | **Snapshot** | the state of every entity at one tick | ENTITY_UPDATE, 30 times per second |

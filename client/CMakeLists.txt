@@ -5,7 +5,7 @@ add_library(rtype-client-options STATIC Options.cpp)
 target_include_directories(rtype-client-options PUBLIC ${PROJECT_SOURCE_DIR})
 rtype_set_warnings(rtype-client-options)
 
-add_library(rtype-client-scene STATIC Scene.cpp)
+add_library(rtype-client-scene STATIC Scene.cpp Menu.cpp)
 target_link_libraries(rtype-client-scene PUBLIC rtype::client-net)
 rtype_set_warnings(rtype-client-scene)
 

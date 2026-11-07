@@ -1,0 +1,16 @@
+// The story mode: levels are played in this order. Add a file to the list to add a level.
+{
+  "name": "Save the Summoner's Cup",
+  "levels": [
+    "story/01-the-heist.json",
+    "story/02-asteroid-lanes.json",
+    "story/03-swiss-round-one.json",
+    "story/04-elimination.json",
+    "story/05-gatekeeper.json",
+    "story/06-nebula-drift.json",
+    "story/07-turret-fortress.json",
+    "story/08-the-rift.json",
+    "story/09-game-five.json",
+    "story/10-summoners-cup.json"
+  ]
+}

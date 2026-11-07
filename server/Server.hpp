@@ -62,10 +62,12 @@ private:
   void runTick();
   void tick(Clock::time_point now);
   void handlePacket(const Incoming& incoming, Clock::time_point now);
-  void handleConnect(const engine::network::Endpoint& from, Clock::time_point now);
+  void handleConnect(const engine::network::Endpoint& from,
+                     const rtype::protocol::Connect& connect, Clock::time_point now);
   void closeSession(const Session& session, rtype::protocol::LeaveReason reason);
   void broadcastChanges(const GameWorld::Changes& changes);
   void broadcastSnapshot();
+  void broadcastLevelInfo();
   void sendTo(Session& session, const rtype::protocol::Payload& payload);
   void broadcast(const rtype::protocol::Payload& payload);
   void logDrops();
@@ -83,6 +85,7 @@ private:
   std::atomic<std::uint64_t> _queueFull{0};
   std::atomic<std::uint64_t> _ignored{0};
   std::uint64_t _reportedDrops = 0;
+  std::uint32_t _sentLevelRevision = 0;
 };
 
 } // namespace server

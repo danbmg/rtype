@@ -15,15 +15,21 @@ struct WorldBounds {
   float height = 600.0F;
 };
 
-// Timing of the Bydos waves, in seconds. Shots are aimed at a random player.
+// Finite waves: clear all enemies before the inter-wave pause starts.
 struct EnemyWaveSettings {
   float spawnIntervalSeconds = 1.2F;
   float fireChancePerSecond = 0.25F;
   float shotSpeed = 220.0F;
+  float interWaveDelaySeconds = 3.0F;
+  std::uint32_t enemiesPerWave = 5;
+  std::uint32_t extraEnemiesPerWave = 2;
+  std::uint32_t bossEveryWaves = 5;
 };
 
 // Distance an entity may travel past the screen edge before it is destroyed.
 constexpr float OFFSCREEN_MARGIN = 64.0F;
+// A ship that loses a life ignores enemy fire and contact for this long.
+constexpr float RESPAWN_INVULNERABLE_SECONDS = 2.0F;
 
 void registerSystems(engine::ecs::Registry& registry);
 void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,

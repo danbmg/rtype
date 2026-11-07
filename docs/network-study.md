@@ -12,7 +12,7 @@ measurements on a laptop (loopback interface) unless stated otherwise.
 | Boost.Asio | Same API | Pulls Boost into the build for nothing more |
 | Raw BSD sockets / Winsock | No dependency, full control | Two APIs to maintain (`WSAStartup`, `errno` vs `WSAGetLastError`, non-blocking modes differ); everything Asio already tests would have to be rewritten |
 | SFML Network | Already used by the client | The server would depend on SFML, which our architecture forbids; minimal UDP support, no asynchronous model |
-| ENet / GameNetworkingSockets | Reliability, channels and fragmentation out of the box | Hide the protocol we must design ourselves; reliability is precisely our part 2 track |
+| ENet / GameNetworkingSockets | Reliability, channels and fragmentation out of the box | Hide the protocol we want to design ourselves; reliability is precisely what we want to build and measure |
 
 Asio is used in one file only (`engine/network/UdpSocket.cpp`) and linked privately: the rest of
 the project sees `UdpSocket` and `Endpoint`, so the library could be replaced without touching
@@ -24,7 +24,7 @@ the server, the client or the game.
 it until it is resent (head-of-line blocking), so a position from 200 ms ago can delay the one
 from now. In an action game the newest state matters more than a complete history. UDP delivers
 each datagram on its own or not at all; our protocol is built so that losing one does not matter
-(section 4). The subject also requires UDP for all in-game traffic.
+(section 4). All in-game traffic therefore uses UDP.
 
 **Binary rather than text.** One entity in a snapshot takes 14 bytes. The same information as
 JSON, `{"id":5,"kind":1,"player":0,"x":60.0,"y":111.5}`, takes about 50: three to four times the
@@ -50,7 +50,7 @@ that anything accepted must re-encode to exactly the same bytes.
 | Events only ("entity 5 moved by 3 px") | Small | One lost datagram desynchronises the client forever |
 | Lockstep (everyone exchanges inputs, everyone simulates) | Tiny bandwidth | The slowest player sets the pace; needs a perfectly deterministic simulation on every machine; the server would no longer be the only authority |
 | **Full snapshots + events** (chosen) | Self-healing: the next snapshot fixes any loss; simple | Bandwidth grows with the number of entities |
-| Delta snapshots against the last acknowledged one | Much smaller | Needs acknowledgements: part 2 |
+| Delta snapshots against the last acknowledged one | Much smaller | Needs acknowledgements: planned |
 
 Measured with 4 players: 74 datagrams per second and **12 KiB/s per client** including IPv4 and
 UDP headers, for up to 26 entities per snapshot. The events (ENTITY_SPAWN, ENTITY_DESTROY) are
@@ -72,7 +72,7 @@ losing its connection.
 
 ## 6. Storage
 
-**Part 1 stores nothing on disk.** Everything the server needs lives in memory for the duration
+**The server stores nothing on disk.** Everything the server needs lives in memory for the duration
 of a game, and the data structures were picked for their bounds:
 
 | Data | Structure | Why |
@@ -82,7 +82,7 @@ of a game, and the data structures were picked for their bounds:
 | Entity states known by the clients | `std::unordered_map` from entity id | spawn and destroy detection in O(1) per entity |
 | ECS components | sparse arrays indexed by entity id (see the engine study) | |
 
-When persistent data arrives (high scores, server configuration, part 2 lobbies):
+When persistent data arrives (high scores, server configuration, lobbies):
 
 | Option | Fits | Does not fit |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ are untrusted: a player may run a modified client. The network may lose, duplica
 
 | Gap | Consequence | Fix |
 | --- | --- | --- |
-| No authentication | anyone can join | accounts or a lobby token (part 2) |
+| No authentication | anyone can join | accounts or a lobby token (planned) |
 | No encryption | traffic can be read and forged on the path | DTLS, or libsodium authenticated encryption per session |
 | Source addresses can be spoofed | a third party could send INPUT or DISCONNECT for a player, or make the server stream to a victim for 3 s | a random session token in ACCEPT, required in every later packet |
 | Git tags can be moved by a dependency's authors | a pinned tag could change content | pin dependencies by commit hash and check archive hashes |
@@ -140,4 +140,4 @@ Security is not only what the code does on day one; it is also noticing problems
 | crashed or vanished players | every join, departure and timeout is logged with the player number | in place |
 | regressions in validation | the codec tests (every truncation, 100 000 random datagrams) run on every pull request; Linux builds treat warnings as errors | in place |
 | vulnerabilities in Asio, SFML, Catch2 | follow the upstream releases and security advisories, bump through a reviewed pull request; GitHub's automatic dependency alerts do not read CPM declarations, so this check is manual | process |
-| network health in play | expose loss, latency and bandwidth (`NetStats`) to the metrics overlay | part 2 |
+| network health in play | expose loss, latency and bandwidth (`NetStats`) to the metrics overlay | planned |

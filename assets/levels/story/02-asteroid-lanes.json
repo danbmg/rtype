@@ -1,0 +1,12 @@
+{
+  "title": "Play-In: Asteroid Lanes",
+  "story": "The thieves run through the asteroid lanes.\nTheir scouts weave between the rocks: watch the wavy ones,\nthey never fly in a straight line.",
+  "theme": 1,
+  "waves": [
+    { "enemy": "waver", "count": 6, "interval": 0.8 },
+    { "enemy": "drone", "count": 8, "interval": 0.5, "formation": "line" },
+    { "enemy": "waver", "count": 6, "interval": 0.7, "formation": "stairs" },
+    { "enemy": "heavy-drone", "count": 3, "interval": 1.2, "formation": "v" },
+    { "enemy": "drone", "count": 10, "interval": 0.4 }
+  ]
+}

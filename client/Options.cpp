@@ -18,6 +18,26 @@ Options parseOptions(std::span<const std::string_view> arguments,
       options.help = true;
     } else if (flag == "--mute") {
       options.mute = true;
+    } else if (flag == "--join") {
+      options.join = true;
+    } else if (flag == "--mode" || flag == "--difficulty") {
+      if (++index == arguments.size()) {
+        throw std::invalid_argument("Missing value for " + std::string(flag));
+      }
+      const auto value = arguments[index];
+      if (flag == "--mode" && (value == "story" || value == "endless")) {
+        options.mode = value == "story" ? rtype::protocol::GameMode::Story
+                                        : rtype::protocol::GameMode::Endless;
+      } else if (flag == "--difficulty" && value == "easy") {
+        options.difficulty = rtype::protocol::Difficulty::Easy;
+      } else if (flag == "--difficulty" && value == "normal") {
+        options.difficulty = rtype::protocol::Difficulty::Normal;
+      } else if (flag == "--difficulty" && value == "hard") {
+        options.difficulty = rtype::protocol::Difficulty::Hard;
+      } else {
+        throw std::invalid_argument("Invalid value for " + std::string(flag) + ": " +
+                                    std::string(value));
+      }
     } else if (flag == "-h" || flag == "-p" || flag == "--assets") {
       if (++index == arguments.size() || arguments[index].empty()) {
         throw std::invalid_argument("Missing value for " + std::string(flag));

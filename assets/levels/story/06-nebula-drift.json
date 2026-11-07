@@ -1,0 +1,12 @@
+{
+  "title": "Semifinal: Nebula Drift",
+  "story": "Behind the gate, a nebula hides the Bydos fleet.\nShapes ripple in the fog. Stay together and cover each other.",
+  "theme": 1,
+  "waves": [
+    { "enemy": "waver", "count": 8, "interval": 0.5, "formation": "v" },
+    { "enemy": "zigzag", "count": 8, "interval": 0.5 },
+    { "enemy": "heavy-drone", "count": 5, "interval": 0.9, "formation": "stairs" },
+    { "enemy": "waver", "count": 10, "interval": 0.4, "formation": "line" },
+    { "enemy": "charger", "count": 8, "interval": 0.5 }
+  ]
+}

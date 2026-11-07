@@ -53,9 +53,10 @@ Start the server, then one client per player (up to four), each in its own termi
 ./r-type_client -h 127.0.0.1 -p 4242
 ```
 
-Press **Enter** in the client to join. Arrow keys move, **Space** fires, **Tab** switches to
-WASD or ZQSD, **Escape** leaves. The full list of keys is in the
-[client page](theodsh-client.md#controls-and-accessibility).
+In the client menu, choose the game mode and the difficulty, then **JOIN THE GAME** with
+**Enter**. Arrow keys move, **Space** fires, **F2** toggles auto-fire, **Escape** goes back to the
+menu. The keys can be changed in the menu (CONTROLS); see the [demo page](demo.md) for every
+command and key.
 
 To play on a local network, start the server on one machine and give its address to `-h` on the
 others. The server listens on UDP: allow the port in the firewall of the server machine.

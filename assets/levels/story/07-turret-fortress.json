@@ -1,0 +1,12 @@
+{
+  "title": "Semifinal: Turret Fortress",
+  "story": "An orbital fortress guards the route to the Bydos base.\nIts turrets never sleep. Pick up shields and push through.",
+  "theme": 3,
+  "waves": [
+    { "enemy": "turret", "count": 5, "interval": 1.0, "formation": "stairs" },
+    { "enemy": "drone", "count": 12, "interval": 0.35, "formation": "v" },
+    { "enemy": "turret", "count": 6, "interval": 0.9 },
+    { "enemy": "heavy-drone", "count": 6, "interval": 0.7, "formation": "line" },
+    { "enemy": "charger", "count": 10, "interval": 0.4 }
+  ]
+}

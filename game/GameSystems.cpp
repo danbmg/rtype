@@ -1,9 +1,12 @@
 #include "game/GameSystems.hpp"
+#include "game/EquipmentSystems.hpp"
+#include "game/LevelDirector.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace game {
@@ -27,6 +30,27 @@ bool overlaps(const Position& lhsPosition, const Hitbox& lhsHitbox, const Positi
          lhsPosition.x + lhsHitbox.width > rhsPosition.x &&
          lhsPosition.y < rhsPosition.y + rhsHitbox.height &&
          lhsPosition.y + lhsHitbox.height > rhsPosition.y;
+}
+
+// What protects a ship from one hit. Invulnerable (just respawned): the hit does not happen at
+// all. Shield: the hit is absorbed and the shield is gone.
+enum class Protection { None, Invulnerable, Shield };
+
+Protection protectionOf(engine::ecs::Registry& registry, Entity ship) {
+  const auto* equipment = registry.getComponent<Equipment>(ship);
+  if (equipment == nullptr) {
+    return Protection::None;
+  }
+  if (equipment->invulnerableSeconds > 0.0F) {
+    return Protection::Invulnerable;
+  }
+  return equipment->shieldSeconds > 0.0F ? Protection::Shield : Protection::None;
+}
+
+void consumeShield(engine::ecs::Registry& registry, Entity ship) {
+  if (auto* equipment = registry.getComponent<Equipment>(ship)) {
+    equipment->shieldSeconds = 0.0F;
+  }
 }
 
 bool overlaps(const engine::ecs::Registry& registry, Entity lhs, Entity rhs) {
@@ -58,13 +82,6 @@ void validateBounds(WorldBounds bounds) {
   }
 }
 
-// State shared by the enemy spawner and enemy fire systems. The scheduler stores copyable
-// std::function objects, so the systems share it through a shared_ptr.
-struct EnemyDirector {
-  std::mt19937 random;
-  float spawnTimer = 0.0F;
-};
-
 } // namespace
 
 void registerSystems(engine::ecs::Registry& registry) {
@@ -76,10 +93,19 @@ void registerSystems(engine::ecs::Registry& registry) {
   registry.registerComponent<Enemy>();
   registry.registerComponent<Projectile>();
   registry.registerComponent<Player>();
+  registry.registerComponent<Equipment>();
+  registry.registerComponent<Pickup>();
+  registry.registerComponent<LootDrop>();
+  registry.registerComponent<Appearance>();
+  registry.registerComponent<EnemyBehavior>();
+  registry.registerComponent<BossBehavior>();
 }
 
 void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,
                              float deltaSeconds, WorldBounds bounds) {
+  scheduler.addSystem("equipment-timers", [deltaSeconds](engine::ecs::Registry& registry) {
+    updateEquipment(registry, deltaSeconds);
+  });
   scheduler.addSystem("movement", [deltaSeconds](engine::ecs::Registry& registry) {
     updateMovement(registry, deltaSeconds);
   });
@@ -94,6 +120,9 @@ void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry
   });
   scheduler.addSystem("ship-collisions",
                       [](engine::ecs::Registry& registry) { resolveShipCollisions(registry); });
+  scheduler.addSystem("pickup-collisions", [](engine::ecs::Registry& registry) {
+    collectPickups(registry);
+  });
   scheduler.addSystem("player-deaths",
                       [](engine::ecs::Registry& registry) { handlePlayerDeaths(registry); });
   scheduler.addSystem("dead-entity-cleanup",
@@ -107,39 +136,31 @@ void registerEnemySystems(engine::core::SystemScheduler<engine::ecs::Registry>& 
   if (!std::isfinite(deltaSeconds) || deltaSeconds <= 0.0F ||
       !std::isfinite(settings.spawnIntervalSeconds) || settings.spawnIntervalSeconds <= 0.0F ||
       !std::isfinite(settings.fireChancePerSecond) || settings.fireChancePerSecond < 0.0F ||
-      !std::isfinite(settings.shotSpeed) || settings.shotSpeed <= 0.0F) {
+      !std::isfinite(settings.shotSpeed) || settings.shotSpeed <= 0.0F ||
+      !std::isfinite(settings.interWaveDelaySeconds) || settings.interWaveDelaySeconds < 0.0F ||
+      settings.enemiesPerWave == 0 || settings.bossEveryWaves == 0) {
     throw std::invalid_argument("enemy wave timing, fire chance, and shot speed must be valid");
   }
 
-  auto director = std::make_shared<EnemyDirector>(EnemyDirector{std::mt19937(seed), 0.0F});
-
-  scheduler.addSystem("enemy-spawner",
-                      [director, deltaSeconds, bounds, settings](engine::ecs::Registry& registry) {
-                        director->spawnTimer += deltaSeconds;
-                        while (director->spawnTimer >= settings.spawnIntervalSeconds) {
-                          director->spawnTimer -= settings.spawnIntervalSeconds;
-                          spawnRandomEnemy(registry, director->random, bounds);
-                        }
-                      });
-
-  scheduler.addSystem("enemy-fire", [director, deltaSeconds, bounds,
-                                     settings](engine::ecs::Registry& registry) {
-    const auto players = registry.view<Player, Position>();
-    if (players.empty()) {
-      return;
-    }
-    const double chance =
-        std::min(1.0, static_cast<double>(settings.fireChancePerSecond * deltaSeconds));
-    std::bernoulli_distribution fires(chance);
-    std::uniform_int_distribution<std::size_t> pickTarget(0, players.size() - 1);
-    for (const auto enemy : registry.view<Enemy, Position>()) {
-      // Only enemies already on screen may shoot.
-      if (registry.getComponent<Position>(enemy)->x >= bounds.width || !fires(director->random)) {
-        continue;
-      }
-      fireEnemyProjectile(registry, enemy, players[pickTarget(director->random)],
-                          settings.shotSpeed);
-    }
+  LevelCatalog catalog;
+  LevelDefinition level;
+  for (std::uint32_t index = 0; index < 5; ++index) {
+    WaveDefinition wave;
+    wave.boss = (index + 1) % settings.bossEveryWaves == 0;
+    wave.enemyCount = wave.boss ? 1U : static_cast<std::uint32_t>(
+        std::min<std::uint64_t>(50, settings.enemiesPerWave +
+            static_cast<std::uint64_t>(index) * settings.extraEnemiesPerWave));
+    wave.enemyHealth = wave.boss ? 30 : 1;
+    wave.spawnIntervalSeconds = settings.spawnIntervalSeconds;
+    wave.fireChancePerSecond = settings.fireChancePerSecond;
+    wave.shotSpeed = settings.shotSpeed;
+    level.waves.push_back(wave);
+  }
+  level.interWaveDelaySeconds = settings.interWaveDelaySeconds;
+  catalog.define(std::move(level));
+  auto director = std::make_shared<LevelDirector>(seed, bounds, std::move(catalog));
+  scheduler.addSystem("level-director", [director, deltaSeconds](engine::ecs::Registry& registry) {
+    director->update(registry, deltaSeconds);
   });
 }
 
@@ -379,6 +400,18 @@ std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry) {
         continue;
       }
 
+      if (isPlayer) {
+        const auto protection = protectionOf(registry, targetEntity);
+        if (protection == Protection::Invulnerable) {
+          continue; // the shot flies through a ship that just respawned
+        }
+        if (protection == Protection::Shield) {
+          consumeShield(registry, targetEntity);
+          projectilesToRemove.push_back(projectileEntity);
+          ++collisions;
+          break;
+        }
+      }
       targetHealth->current = std::max(0, targetHealth->current - projectile->damage);
       if (projectile->friendly && targetHealth->current == 0) {
         auto* shooter = findPlayerById(registry, projectile->ownerId);
@@ -413,8 +446,22 @@ std::size_t resolveShipCollisions(engine::ecs::Registry& registry) {
         continue;
       }
       // Ramming destroys the Bydos and costs the player one hit point, without awarding points.
-      playerHealth->current -= 1;
-      enemyHealth->current = 0;
+      // A shield takes the hit instead; a ship that just respawned takes nothing.
+      const auto protection = protectionOf(registry, player);
+      if (protection == Protection::Shield) {
+        consumeShield(registry, player);
+      } else if (protection == Protection::None) {
+        playerHealth->current -= 1;
+      }
+      if (registry.getComponent<Enemy>(enemy)->pattern == Enemy::BOSS_PATTERN) {
+        enemyHealth->current -= 1;
+        // Push the ship away so contact cannot consume every life in consecutive ticks.
+        registry.getComponent<Position>(player)->x = std::max(
+            0.0F, registry.getComponent<Position>(enemy)->x -
+                      registry.getComponent<Hitbox>(player)->width - 16.0F);
+      } else {
+        enemyHealth->current = 0;
+      }
       ++collisions;
     }
   }
@@ -429,12 +476,20 @@ std::size_t handlePlayerDeaths(engine::ecs::Registry& registry) {
     if (health->current > 0 || player->lives <= 0) {
       continue;
     }
+    auto* equipment = registry.getComponent<Equipment>(entity);
+    if (equipment != nullptr) {
+      *equipment = Equipment{};
+    }
     --player->lives;
     ++livesLost;
-    // With lives left the ship respawns in place; on its last life health stays at zero and
+    // With lives left the ship respawns in place, briefly invulnerable so that the shots
+    // already on their way cannot take a second life; on its last life health stays at zero and
     // removeDeadEntities destroys it.
     if (player->lives > 0) {
       health->current = health->max;
+      if (equipment != nullptr) {
+        equipment->invulnerableSeconds = RESPAWN_INVULNERABLE_SECONDS;
+      }
     }
   }
   return livesLost;
@@ -476,6 +531,23 @@ std::size_t removeDeadEntities(engine::ecs::Registry& registry) {
     }
   }
   for (const auto entity : deadEntities) {
+    if (registry.getComponent<Enemy>(entity) != nullptr) {
+      const auto* drop = registry.getComponent<LootDrop>(entity);
+      const auto* position = registry.getComponent<Position>(entity);
+      if (drop != nullptr && position != nullptr) {
+        // Copy before spawning: adding components may reallocate their storage.
+        const auto type = drop->type;
+        auto location = *position;
+        if (type == PickupType::Trophy) {
+          // The Cup appears in the middle of the boss wreck.
+          if (const auto* hitbox = registry.getComponent<Hitbox>(entity)) {
+            location.x += (hitbox->width - TROPHY_SIZE) / 2.0F;
+            location.y += (hitbox->height - TROPHY_SIZE) / 2.0F;
+          }
+        }
+        spawnPickup(registry, type, location.x, location.y);
+      }
+    }
     registry.killEntity(entity);
   }
   return deadEntities.size();
