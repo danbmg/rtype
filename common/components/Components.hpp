@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/components/Behavior.hpp"
 #include "common/components/Enemy.hpp"
 #include "common/components/Equipment.hpp"
 #include "common/components/Health.hpp"

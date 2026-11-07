@@ -32,6 +32,27 @@ bool overlaps(const Position& lhsPosition, const Hitbox& lhsHitbox, const Positi
          lhsPosition.y + lhsHitbox.height > rhsPosition.y;
 }
 
+// What protects a ship from one hit. Invulnerable (just respawned): the hit does not happen at
+// all. Shield: the hit is absorbed and the shield is gone.
+enum class Protection { None, Invulnerable, Shield };
+
+Protection protectionOf(engine::ecs::Registry& registry, Entity ship) {
+  const auto* equipment = registry.getComponent<Equipment>(ship);
+  if (equipment == nullptr) {
+    return Protection::None;
+  }
+  if (equipment->invulnerableSeconds > 0.0F) {
+    return Protection::Invulnerable;
+  }
+  return equipment->shieldSeconds > 0.0F ? Protection::Shield : Protection::None;
+}
+
+void consumeShield(engine::ecs::Registry& registry, Entity ship) {
+  if (auto* equipment = registry.getComponent<Equipment>(ship)) {
+    equipment->shieldSeconds = 0.0F;
+  }
+}
+
 bool overlaps(const engine::ecs::Registry& registry, Entity lhs, Entity rhs) {
   const auto* lhsPosition = registry.getComponent<Position>(lhs);
   const auto* lhsHitbox = registry.getComponent<Hitbox>(lhs);
@@ -75,6 +96,9 @@ void registerSystems(engine::ecs::Registry& registry) {
   registry.registerComponent<Equipment>();
   registry.registerComponent<Pickup>();
   registry.registerComponent<LootDrop>();
+  registry.registerComponent<Appearance>();
+  registry.registerComponent<EnemyBehavior>();
+  registry.registerComponent<BossBehavior>();
 }
 
 void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,
@@ -376,6 +400,18 @@ std::size_t resolveProjectileCollisions(engine::ecs::Registry& registry) {
         continue;
       }
 
+      if (isPlayer) {
+        const auto protection = protectionOf(registry, targetEntity);
+        if (protection == Protection::Invulnerable) {
+          continue; // the shot flies through a ship that just respawned
+        }
+        if (protection == Protection::Shield) {
+          consumeShield(registry, targetEntity);
+          projectilesToRemove.push_back(projectileEntity);
+          ++collisions;
+          break;
+        }
+      }
       targetHealth->current = std::max(0, targetHealth->current - projectile->damage);
       if (projectile->friendly && targetHealth->current == 0) {
         auto* shooter = findPlayerById(registry, projectile->ownerId);
@@ -410,7 +446,13 @@ std::size_t resolveShipCollisions(engine::ecs::Registry& registry) {
         continue;
       }
       // Ramming destroys the Bydos and costs the player one hit point, without awarding points.
-      playerHealth->current -= 1;
+      // A shield takes the hit instead; a ship that just respawned takes nothing.
+      const auto protection = protectionOf(registry, player);
+      if (protection == Protection::Shield) {
+        consumeShield(registry, player);
+      } else if (protection == Protection::None) {
+        playerHealth->current -= 1;
+      }
       if (registry.getComponent<Enemy>(enemy)->pattern == Enemy::BOSS_PATTERN) {
         enemyHealth->current -= 1;
         // Push the ship away so contact cannot consume every life in consecutive ticks.
@@ -434,15 +476,20 @@ std::size_t handlePlayerDeaths(engine::ecs::Registry& registry) {
     if (health->current > 0 || player->lives <= 0) {
       continue;
     }
-    if (auto* equipment = registry.getComponent<Equipment>(entity)) {
+    auto* equipment = registry.getComponent<Equipment>(entity);
+    if (equipment != nullptr) {
       *equipment = Equipment{};
     }
     --player->lives;
     ++livesLost;
-    // With lives left the ship respawns in place; on its last life health stays at zero and
+    // With lives left the ship respawns in place, briefly invulnerable so that the shots
+    // already on their way cannot take a second life; on its last life health stays at zero and
     // removeDeadEntities destroys it.
     if (player->lives > 0) {
       health->current = health->max;
+      if (equipment != nullptr) {
+        equipment->invulnerableSeconds = RESPAWN_INVULNERABLE_SECONDS;
+      }
     }
   }
   return livesLost;
@@ -490,7 +537,14 @@ std::size_t removeDeadEntities(engine::ecs::Registry& registry) {
       if (drop != nullptr && position != nullptr) {
         // Copy before spawning: adding components may reallocate their storage.
         const auto type = drop->type;
-        const auto location = *position;
+        auto location = *position;
+        if (type == PickupType::Trophy) {
+          // The Cup appears in the middle of the boss wreck.
+          if (const auto* hitbox = registry.getComponent<Hitbox>(entity)) {
+            location.x += (hitbox->width - TROPHY_SIZE) / 2.0F;
+            location.y += (hitbox->height - TROPHY_SIZE) / 2.0F;
+          }
+        }
         spawnPickup(registry, type, location.x, location.y);
       }
     }

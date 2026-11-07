@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "common/components/Equipment.hpp"
@@ -9,7 +10,10 @@
 namespace game {
 
 constexpr float RAPID_FIRE_SECONDS = 8.0F;
+constexpr float SHIELD_SECONDS = 12.0F;
 constexpr int MAX_PLAYER_LIVES = 9;
+constexpr float TROPHY_SIZE = 40.0F;
+constexpr std::uint32_t TROPHY_POINTS = 10000;
 
 engine::ecs::Entity spawnPickup(engine::ecs::Registry& registry,
                                 rtype::common::components::PickupType type, float x, float y);

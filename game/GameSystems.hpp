@@ -28,6 +28,8 @@ struct EnemyWaveSettings {
 
 // Distance an entity may travel past the screen edge before it is destroyed.
 constexpr float OFFSCREEN_MARGIN = 64.0F;
+// A ship that loses a life ignores enemy fire and contact for this long.
+constexpr float RESPAWN_INVULNERABLE_SECONDS = 2.0F;
 
 void registerSystems(engine::ecs::Registry& registry);
 void registerGameplaySystems(engine::core::SystemScheduler<engine::ecs::Registry>& scheduler,

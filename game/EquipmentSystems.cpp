@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #include "game/GameSystems.hpp"
@@ -11,7 +12,7 @@ using namespace rtype::common::components;
 
 namespace {
 bool valid(PickupType type) {
-  return type >= PickupType::ExtraLife && type <= PickupType::HeavyShot;
+  return type >= PickupType::ExtraLife && type <= PickupType::Trophy;
 }
 } // namespace
 
@@ -21,6 +22,13 @@ engine::ecs::Entity spawnPickup(engine::ecs::Registry& registry, PickupType type
   }
   const auto entity = registry.spawnEntity();
   registry.addComponent(entity, Position{x, y});
+  if (type == PickupType::Trophy) {
+    // The Cup waits where the final boss fell: the game is won when a player flies into it.
+    registry.addComponent(entity, Velocity{0.0F, 0.0F});
+    registry.addComponent(entity, Hitbox{TROPHY_SIZE, TROPHY_SIZE});
+    registry.addComponent(entity, Pickup{type, std::numeric_limits<float>::infinity()});
+    return entity;
+  }
   registry.addComponent(entity, Velocity{-45.0F, 0.0F});
   registry.addComponent(entity, Hitbox{20.0F, 20.0F});
   registry.addComponent(entity, Pickup{type, 12.0F});
@@ -59,6 +67,12 @@ bool applyPickup(engine::ecs::Registry& registry, engine::ecs::Entity entity, Pi
   case PickupType::HeavyShot:
     equipment->weapon = WeaponType::Heavy;
     break;
+  case PickupType::Shield:
+    equipment->shieldSeconds = SHIELD_SECONDS;
+    break;
+  case PickupType::Trophy:
+    player->score += TROPHY_POINTS;
+    break;
   }
   return true;
 }
@@ -90,6 +104,9 @@ void updateEquipment(engine::ecs::Registry& registry, float deltaSeconds) {
   for (const auto player : registry.view<Equipment>()) {
     auto* equipment = registry.getComponent<Equipment>(player);
     equipment->rapidFireSeconds = std::max(0.0F, equipment->rapidFireSeconds - deltaSeconds);
+    equipment->shieldSeconds = std::max(0.0F, equipment->shieldSeconds - deltaSeconds);
+    equipment->invulnerableSeconds =
+        std::max(0.0F, equipment->invulnerableSeconds - deltaSeconds);
   }
   for (const auto entity : registry.view<Pickup>()) {
     auto* pickup = registry.getComponent<Pickup>(entity);
