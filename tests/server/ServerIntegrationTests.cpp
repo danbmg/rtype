@@ -312,3 +312,40 @@ TEST_CASE("A client notices when the server stops answering", "[server][integrat
       std::chrono::milliseconds(protocol::TIMEOUT_MS) + 2s));
   CHECK(player.state() == client::net::ConnectionState::Failed);
 }
+
+TEST_CASE("Tutorial players skip levels over the network, for everyone",
+          "[server][integration][tutorial]") {
+  server::Server server(testConfig());
+  server.start();
+  NetworkClient host;
+  NetworkClient guest;
+  REQUIRE(host.connectBlocking("127.0.0.1", server.port(), 3s, protocol::GameMode::Story,
+                               protocol::Difficulty::Tutorial));
+  // The guest asks for something else and joins the tutorial in progress.
+  REQUIRE(guest.connectBlocking("127.0.0.1", server.port(), 3s, protocol::GameMode::Endless,
+                                protocol::Difficulty::Hard));
+  const std::vector<NetworkClient*> both{&host, &guest};
+  const auto atLevel = [&](std::uint16_t level) {
+    return std::ranges::all_of(both, [level](const NetworkClient* client) {
+      return client->gameStatus().level == level && client->levelInfo().level == level;
+    });
+  };
+  REQUIRE(pump(both, [&] { return atLevel(1); }));
+  CHECK(guest.gameStatus().difficulty == protocol::Difficulty::Tutorial);
+
+  host.requestSkipLevel();
+  CHECK(pump(both, [&] { return atLevel(2); }));
+  guest.requestSkipLevel();
+  CHECK(pump(both, [&] { return atLevel(3); }));
+}
+
+TEST_CASE("SKIP_LEVEL changes nothing outside a tutorial", "[server][integration][tutorial]") {
+  server::Server server(testConfig());
+  server.start();
+  NetworkClient player;
+  REQUIRE(player.connectBlocking("127.0.0.1", server.port()));
+  REQUIRE(pump({&player}, [&] { return player.gameStatus().level == 1; }));
+  player.requestSkipLevel();
+  CHECK_FALSE(pump({&player}, [&] { return player.gameStatus().level != 1; }, 500ms));
+  CHECK(server.stats().invalid == 0); // a valid packet, simply not honoured
+}

@@ -45,6 +45,7 @@ std::vector<protocol::Payload> samplePayloads() {
       protocol::Input{protocol::input::UP | protocol::input::FIRE},
       protocol::Ping{0xDEADBEEF},
       protocol::Disconnect{},
+      protocol::SkipLevel{7},
       protocol::Accept{3, 800, 600, 60},
       protocol::Reject{protocol::RejectReason::VersionMismatch},
       protocol::Pong{42},
@@ -56,6 +57,7 @@ std::vector<protocol::Payload> samplePayloads() {
       protocol::PlayerStatus{{{0, 3, 2, 1500}, {3, 0, 0, 4294967295U}}},
       protocol::PlayerLeft{1, protocol::LeaveReason::TimedOut},
       protocol::Connect{protocol::GameMode::Endless, protocol::Difficulty::Hard},
+      protocol::Connect{protocol::GameMode::Story, protocol::Difficulty::Tutorial},
       protocol::GameStatus{protocol::GameMode::Story, protocol::Difficulty::Easy,
                            protocol::GamePhase::BossFight, 5, 10, 3, 3, 120, 400, 0},
       protocol::LevelInfo{5, 2, "Quarterfinal", "The Gatekeeper blocks the way.\nBreak through!"},
@@ -149,7 +151,7 @@ TEST_CASE("Foreign or unknown datagrams are rejected", "[protocol][codec][malfor
   badVersion[2] = protocol::VERSION + 1;
   CHECK(errorOf(badVersion) == DecodeError::BadVersion);
 
-  for (const int type : {0x00, 0x05, 0x0B, 0x17, 0x7F, 0xFF}) {
+  for (const int type : {0x00, 0x06, 0x0B, 0x17, 0x7F, 0xFF}) {
     auto unknown = datagram;
     unknown[3] = static_cast<std::uint8_t>(type);
     CHECK(errorOf(unknown) == DecodeError::UnknownType);
@@ -296,7 +298,34 @@ TEST_CASE("CONNECT carries the requested game mode and difficulty", "[protocol][
   CHECK(connect.difficulty == protocol::Difficulty::Easy);
   CHECK(errorOf(withHeader(protocol::PacketType::Connect, {})) == DecodeError::SizeMismatch);
   CHECK(errorOf(withHeader(protocol::PacketType::Connect, {2, 1})) == DecodeError::InvalidValue);
-  CHECK(errorOf(withHeader(protocol::PacketType::Connect, {0, 3})) == DecodeError::InvalidValue);
+  CHECK(errorOf(withHeader(protocol::PacketType::Connect, {0, 4})) == DecodeError::InvalidValue);
+}
+
+TEST_CASE("Tutorial is a valid difficulty in CONNECT and GAME_STATUS", "[protocol][codec][v4]") {
+  const auto connect = protocol::decode(withHeader(protocol::PacketType::Connect, {0, 3}));
+  REQUIRE(connect.packet);
+  CHECK(std::get<protocol::Connect>(connect.packet->payload).difficulty ==
+        protocol::Difficulty::Tutorial);
+  const auto status = protocol::decode(
+      withHeader(protocol::PacketType::GameStatus, {0, 3, 2, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0, 0}));
+  REQUIRE(status.packet);
+  CHECK(std::get<protocol::GameStatus>(status.packet->payload).difficulty ==
+        protocol::Difficulty::Tutorial);
+}
+
+TEST_CASE("SKIP_LEVEL carries a level from 1 and nothing else",
+          "[protocol][codec][v4][malformed]") {
+  const auto result = protocol::decode(protocol::encode(3, protocol::SkipLevel{513}));
+  REQUIRE(result.packet);
+  CHECK(result.packet->header.type == protocol::PacketType::SkipLevel);
+  CHECK(std::get<protocol::SkipLevel>(result.packet->payload).level == 513);
+  CHECK(errorOf(withHeader(protocol::PacketType::SkipLevel, {})) == DecodeError::SizeMismatch);
+  CHECK(errorOf(withHeader(protocol::PacketType::SkipLevel, {0})) == DecodeError::SizeMismatch);
+  CHECK(errorOf(withHeader(protocol::PacketType::SkipLevel, {0, 1, 0})) ==
+        DecodeError::SizeMismatch);
+  CHECK(errorOf(withHeader(protocol::PacketType::SkipLevel, {0, 0})) ==
+        DecodeError::InvalidValue); // levels start at 1
+  CHECK(errorOf(withHeader(protocol::PacketType::SkipLevel, {0xFF, 0xFF})) == DecodeError::None);
 }
 
 TEST_CASE("GAME_STATUS rejects inconsistent values", "[protocol][codec][v3][malformed]") {
@@ -308,7 +337,7 @@ TEST_CASE("GAME_STATUS rejects inconsistent values", "[protocol][codec][v3][malf
   CHECK(status({0, 1, 2, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0, 0}) == DecodeError::None);
   CHECK(status({0, 1, 2, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0}) == DecodeError::SizeMismatch);
   CHECK(status({2, 1, 2, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0, 0}) == DecodeError::InvalidValue);
-  CHECK(status({0, 3, 2, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0, 0}) == DecodeError::InvalidValue);
+  CHECK(status({0, 4, 2, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0, 0}) == DecodeError::InvalidValue);
   CHECK(status({0, 1, 7, 0, 3, 0, 10, 1, 4, 0, 0, 0, 0, 0}) == DecodeError::InvalidValue);
   CHECK(status({0, 1, 2, 0, 11, 0, 10, 1, 4, 0, 0, 0, 0, 0}) == DecodeError::InvalidValue);
   CHECK(status({0, 1, 2, 0, 3, 0, 10, 5, 4, 0, 0, 0, 0, 0}) == DecodeError::InvalidValue);
@@ -360,21 +389,22 @@ TEST_CASE("Player flags only use the documented bits", "[protocol][codec][v3][ma
         DecodeError::InvalidValue);
 }
 
-TEST_CASE("The version 3 examples of the RFC are exact", "[protocol][codec][v3][rfc]") {
+TEST_CASE("The examples of the RFC are exact", "[protocol][codec][v4][rfc]") {
   using Bytes = std::vector<std::uint8_t>;
   CHECK(protocol::encode(0, protocol::Connect{}) ==
-        Bytes{0x52, 0x54, 0x03, 0x01, 0, 0, 0, 0, 0x00, 0x02, 0x00, 0x01});
-  CHECK(protocol::encode(0x2C, protocol::PlayerStatus{{{0, 3, 2, 1500, 0, 0,
-                                                        protocol::player::SHIELD}}}) ==
-        Bytes{0x52, 0x54, 0x03, 0x13, 0, 0, 0, 0x2C, 0x00, 0x0C, 0x01, 0x00, 0x03, 0x02, 0x00,
-              0x00, 0x05, 0xDC, 0x00, 0x00, 0x00, 0x01});
-  CHECK(protocol::encode(0x2E, protocol::GameStatus{protocol::GameMode::Story,
-                                                    protocol::Difficulty::Normal,
-                                                    protocol::GamePhase::BossFight, 5, 10, 3, 3,
-                                                    120, 150, 0}) ==
-        Bytes{0x52, 0x54, 0x03, 0x15, 0, 0, 0, 0x2E, 0x00, 0x0E, 0x00, 0x01, 0x03, 0x00, 0x05,
-              0x00, 0x0A, 0x03, 0x03, 0x00, 0x78, 0x00, 0x96, 0x00});
+        Bytes{0x52, 0x54, 0x04, 0x01, 0, 0, 0, 0, 0x00, 0x02, 0x00, 0x01});
+  CHECK(protocol::encode(
+            0x2C, protocol::PlayerStatus{{{0, 3, 2, 1500, 0, 0, protocol::player::SHIELD}}}) ==
+        Bytes{0x52, 0x54, 0x04, 0x13, 0,    0,    0,    0x2C, 0x00, 0x0C, 0x01,
+              0x00, 0x03, 0x02, 0x00, 0x00, 0x05, 0xDC, 0x00, 0x00, 0x00, 0x01});
+  CHECK(protocol::encode(
+            0x2E, protocol::GameStatus{protocol::GameMode::Story, protocol::Difficulty::Normal,
+                                       protocol::GamePhase::BossFight, 5, 10, 3, 3, 120, 150, 0}) ==
+        Bytes{0x52, 0x54, 0x04, 0x15, 0,    0,    0,    0x2E, 0x00, 0x0E, 0x00, 0x01,
+              0x03, 0x00, 0x05, 0x00, 0x0A, 0x03, 0x03, 0x00, 0x78, 0x00, 0x96, 0x00});
   CHECK(protocol::encode(0x2F, protocol::LevelInfo{1, 0, "Go!", "Hi"}) ==
-        Bytes{0x52, 0x54, 0x03, 0x16, 0, 0, 0, 0x2F, 0x00, 0x0B, 0x00, 0x01, 0x00, 0x03, 0x47,
-              0x6F, 0x21, 0x00, 0x02, 0x48, 0x69});
+        Bytes{0x52, 0x54, 0x04, 0x16, 0,    0,    0,    0x2F, 0x00, 0x0B, 0x00,
+              0x01, 0x00, 0x03, 0x47, 0x6F, 0x21, 0x00, 0x02, 0x48, 0x69});
+  CHECK(protocol::encode(0x30, protocol::SkipLevel{3}) ==
+        Bytes{0x52, 0x54, 0x04, 0x05, 0, 0, 0, 0x30, 0x00, 0x02, 0x00, 0x03});
 }

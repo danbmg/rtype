@@ -441,3 +441,84 @@ TEST_CASE("Shields and respawn invulnerability are reported to the clients",
   runTicks(world, static_cast<int>(game::RESPAWN_INVULNERABLE_SECONDS) * TICK_RATE + 1);
   CHECK(world.playerStates().front().flags == 0);
 }
+
+TEST_CASE("A tutorial ship respawns forever: no life lost, no game over",
+          "[server][world][modes][tutorial]") {
+  GameWorld world(TICK_RATE, 9U, {}, shortStory());
+  world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Tutorial);
+  const auto ship = world.spawnPlayer(0);
+  world.step();
+  CHECK(world.isTutorial());
+  CHECK(world.gameStatus().difficulty == protocol::Difficulty::Tutorial);
+  const auto lives = world.playerStates().front().lives;
+  CHECK(lives == 5); // the lives of easy, given back after every death
+
+  for (int death = 0; death < 20; ++death) {
+    world.registry().getComponent<Health>(ship)->current = 0;
+    world.step();
+    REQUIRE(world.registry().containsEntity(ship));
+    CHECK(world.playerStates().front().lives == lives);
+    // Respawned like any ship: clients see the death through the invulnerable flag.
+    CHECK((world.playerStates().front().flags & protocol::player::INVULNERABLE) != 0);
+  }
+  CHECK(world.gameStatus().phase != protocol::GamePhase::GameOver);
+}
+
+TEST_CASE("A tutorial game skips the level the player sees, once per request",
+          "[server][world][modes][tutorial]") {
+  GameWorld world(TICK_RATE, 5U, {}, shortStory());
+  world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Tutorial);
+  world.spawnPlayer(0);
+  world.step();
+  REQUIRE(world.gameStatus().level == 1);
+  const auto revision = world.levelRevision();
+
+  CHECK_FALSE(world.skipLevel(2)); // not the current level
+  CHECK(world.skipLevel(1));
+  world.step();
+  CHECK(world.gameStatus().level == 2);
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Intro);
+  CHECK(world.levelRevision() != revision); // LEVEL_INFO goes out for the new level
+  CHECK(world.levelInfo().title == "Last");
+  CHECK_FALSE(world.skipLevel(1)); // a duplicated datagram does not skip a second level
+
+  // Skipping the final level ends the story with the victory screen, then a new game starts.
+  CHECK(world.skipLevel(2));
+  runTicks(world, 1);
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Victory);
+  CHECK(world.snapshot().size() == 1); // only the ship is left
+  CHECK_FALSE(world.skipLevel(2));
+  runTicks(world, static_cast<int>(GameWorld::VICTORY_SECONDS) * TICK_RATE + TICK_RATE);
+  CHECK(world.gameStatus().level == 1);
+  CHECK(world.gameStatus().difficulty == protocol::Difficulty::Tutorial);
+}
+
+TEST_CASE("Outside a tutorial story, levels cannot be skipped",
+          "[server][world][modes][tutorial]") {
+  SECTION("story in normal") {
+    GameWorld world(TICK_RATE, 5U, {}, shortStory());
+    world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Normal);
+    world.spawnPlayer(0);
+    world.step();
+    CHECK_FALSE(world.isTutorial());
+    CHECK_FALSE(world.skipLevel(1));
+    world.step();
+    CHECK(world.gameStatus().level == 1);
+  }
+  SECTION("endless asked in tutorial is played in normal") {
+    GameWorld world(TICK_RATE, 5U, {}, shortStory());
+    world.requestGame(protocol::GameMode::Endless, protocol::Difficulty::Tutorial);
+    world.spawnPlayer(0);
+    world.step();
+    CHECK(world.gameStatus().mode == protocol::GameMode::Endless);
+    CHECK(world.gameStatus().difficulty == protocol::Difficulty::Normal);
+    CHECK(world.playerStates().front().lives == 3);
+    CHECK_FALSE(world.skipLevel(world.gameStatus().level));
+  }
+  SECTION("nobody playing") {
+    GameWorld world(TICK_RATE, 5U, {}, shortStory());
+    world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Tutorial);
+    CHECK_FALSE(world.isTutorial());
+    CHECK_FALSE(world.skipLevel(1));
+  }
+}
