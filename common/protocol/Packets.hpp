@@ -50,7 +50,8 @@ struct Header {
   std::uint16_t magic = MAGIC;
   std::uint8_t version = VERSION;
   PacketType type = PacketType::Connect;
-  std::uint32_t sequence = 0; // Numéro par expéditeur pour repérer les entrées UDP reçues dans le désordre.
+  std::uint32_t sequence =
+      0; // Numéro par expéditeur pour repérer les entrées UDP reçues dans le désordre.
   std::uint16_t payloadSize = 0;
 };
 
