@@ -36,3 +36,38 @@ void SFMLAudio::setVolume(float volume) {
 }
 
 } // namespace engine::audio
+
+namespace engine::audio {
+
+void SFMLAudio::loadMusic(const std::string& id, const std::filesystem::path& path) {
+  if (!std::filesystem::is_regular_file(path)) {
+    throw std::runtime_error("Could not find music: " + path.string());
+  }
+  _tracks[id] = path;
+}
+
+void SFMLAudio::playMusic(const std::string& id) {
+  if (id == _currentTrack && _music.getStatus() == sf::SoundSource::Status::Playing) {
+    return;
+  }
+  const auto track = _tracks.find(id);
+  if (track == _tracks.end() || !_music.openFromFile(track->second)) {
+    return; // a missing track leaves the game silent rather than stopping it
+  }
+  _currentTrack = id;
+  _music.setLooping(true);
+  _music.setVolume(_musicVolume);
+  _music.play();
+}
+
+void SFMLAudio::stopMusic() {
+  _music.stop();
+  _currentTrack.clear();
+}
+
+void SFMLAudio::setMusicVolume(float volume) {
+  _musicVolume = std::clamp(volume, 0.0F, 100.0F);
+  _music.setVolume(_musicVolume);
+}
+
+} // namespace engine::audio
