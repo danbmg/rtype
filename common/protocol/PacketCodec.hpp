@@ -30,8 +30,9 @@ PacketType packetTypeOf(const Payload& payload);
 
 // Builds one datagram: header + payload, field by field, big-endian.
 // Throws std::length_error if a list is longer than its MAX_*_PER_PACKET constant (or a
-// PlayerStatus holds more than MAX_PLAYERS entries): that is a bug in the sender, which must
-// split long lists over several packets.
+// PlayerStatus holds more than MAX_PLAYERS entries, or a LevelInfo text is longer than its
+// maximum): that is a bug in the sender, which must split long lists over several packets.
+// Throws std::invalid_argument if a LevelInfo text holds something else than printable ASCII.
 std::vector<std::uint8_t> encode(std::uint32_t sequence, const Payload& payload);
 
 // Treats the datagram as hostile: every check (size, magic, version, type, declared size, list

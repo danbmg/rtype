@@ -30,7 +30,9 @@ bool isKnownType(std::uint8_t type) {
   case PacketType::EntityUpdate:
   case PacketType::EntityDestroy:
   case PacketType::PlayerStatus:
-  case PacketType::PlayerLeft: return true;
+  case PacketType::PlayerLeft:
+  case PacketType::GameStatus:
+  case PacketType::LevelInfo: return true;
   }
   return false;
 }
@@ -48,6 +50,42 @@ void requireCount(std::size_t count, std::size_t maximum) {
   }
 }
 
+// LEVEL_INFO texts: printable ASCII and line feeds, so a client can draw them as they are.
+bool isAllowedCharacter(std::uint8_t character) {
+  return character == '\n' || (character >= 0x20 && character <= 0x7E);
+}
+
+void requireText(const std::string& text, std::size_t maximum) {
+  if (text.size() > maximum) {
+    throw std::length_error("protocol: level text too long");
+  }
+  for (const char character : text) {
+    if (!isAllowedCharacter(static_cast<std::uint8_t>(character))) {
+      throw std::invalid_argument("protocol: level text must be printable ASCII");
+    }
+  }
+}
+
+void writeText(BinaryWriter& writer, const std::string& text) {
+  for (const char character : text) {
+    writer.writeU8(static_cast<std::uint8_t>(character));
+  }
+}
+
+// Reads exactly length bytes of text; the caller checked that they are in the datagram.
+bool readText(BinaryReader& reader, std::size_t length, std::string& text) {
+  text.clear();
+  text.reserve(length);
+  for (std::size_t index = 0; index < length; ++index) {
+    const auto character = reader.readU8();
+    if (!isAllowedCharacter(character)) {
+      return false;
+    }
+    text.push_back(static_cast<char>(character));
+  }
+  return reader.ok();
+}
+
 // ---- Encoding ---------------------------------------------------------------------------
 
 void writeEntityState(BinaryWriter& writer, const EntityState& state) {
@@ -61,7 +99,10 @@ void writeEntityState(BinaryWriter& writer, const EntityState& state) {
 struct PayloadWriter {
   BinaryWriter& writer;
 
-  void operator()(const Connect&) const {}
+  void operator()(const Connect& connect) const {
+    writer.writeU8(toByte(connect.mode));
+    writer.writeU8(toByte(connect.difficulty));
+  }
   void operator()(const Disconnect&) const {}
   void operator()(const Input& input) const { writer.writeU8(input.flags); }
   void operator()(const Ping& ping) const { writer.writeU32(ping.token); }
@@ -111,12 +152,37 @@ struct PayloadWriter {
       writer.writeU32(player.score);
       writer.writeU8(player.weapon);
       writer.writeU16(player.rapidFireMilliseconds);
+      writer.writeU8(player.flags);
     }
   }
 
   void operator()(const PlayerLeft& left) const {
     writer.writeU8(left.playerId);
     writer.writeU8(toByte(left.reason));
+  }
+
+  void operator()(const GameStatus& status) const {
+    writer.writeU8(toByte(status.mode));
+    writer.writeU8(toByte(status.difficulty));
+    writer.writeU8(toByte(status.phase));
+    writer.writeU16(status.level);
+    writer.writeU16(status.levelCount);
+    writer.writeU8(status.wave);
+    writer.writeU8(status.waveCount);
+    writer.writeU16(status.bossHealth);
+    writer.writeU16(status.bossMaxHealth);
+    writer.writeU8(status.countdown);
+  }
+
+  void operator()(const LevelInfo& info) const {
+    requireText(info.title, MAX_TITLE_LENGTH);
+    requireText(info.story, MAX_STORY_LENGTH);
+    writer.writeU16(info.level);
+    writer.writeU8(info.theme);
+    writer.writeU8(static_cast<std::uint8_t>(info.title.size()));
+    writeText(writer, info.title);
+    writer.writeU16(static_cast<std::uint16_t>(info.story.size()));
+    writeText(writer, info.story);
   }
 };
 
@@ -133,7 +199,7 @@ DecodeError readEntityState(BinaryReader& reader, EntityState& state) {
   if (!reader.ok()) {
     return DecodeError::SizeMismatch;
   }
-  if (kind < toByte(EntityKind::Player) || kind > toByte(EntityKind::HeavyShot) ||
+  if (kind < toByte(EntityKind::Player) || kind > LAST_ENTITY_KIND ||
       (state.playerId != NO_PLAYER && !isValidPlayerId(state.playerId)) ||
       !std::isfinite(state.x) || !std::isfinite(state.y)) {
     return DecodeError::InvalidValue;
@@ -161,9 +227,18 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
   const auto expect = [&reader](std::size_t size) { return reader.remaining() == size; };
 
   switch (type) {
-  case PacketType::Connect:
-    payload = Connect{};
-    return expect(0) ? DecodeError::None : DecodeError::SizeMismatch;
+  case PacketType::Connect: {
+    if (!expect(2)) {
+      return DecodeError::SizeMismatch;
+    }
+    const auto mode = reader.readU8();
+    const auto difficulty = reader.readU8();
+    if (mode > toByte(GameMode::Endless) || difficulty > toByte(Difficulty::Hard)) {
+      return DecodeError::InvalidValue;
+    }
+    payload = Connect{static_cast<GameMode>(mode), static_cast<Difficulty>(difficulty)};
+    return DecodeError::None;
+  }
 
   case PacketType::Disconnect:
     payload = Disconnect{};
@@ -266,7 +341,9 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
       player.score = reader.readU32();
       player.weapon = reader.readU8();
       player.rapidFireMilliseconds = reader.readU16();
-      if (!isValidPlayerId(player.playerId) || player.weapon > 3) {
+      player.flags = reader.readU8();
+      if (!isValidPlayerId(player.playerId) || player.weapon > 3 ||
+          (player.flags & ~player::ALL) != 0) {
         return DecodeError::InvalidValue;
       }
     }
@@ -285,6 +362,57 @@ DecodeError decodePayload(PacketType type, BinaryReader& reader, Payload& payloa
       return DecodeError::InvalidValue;
     }
     payload = PlayerLeft{playerId, static_cast<LeaveReason>(reason)};
+    return DecodeError::None;
+  }
+
+  case PacketType::GameStatus: {
+    if (!expect(GAME_STATUS_SIZE)) {
+      return DecodeError::SizeMismatch;
+    }
+    const auto mode = reader.readU8();
+    const auto difficulty = reader.readU8();
+    const auto phase = reader.readU8();
+    GameStatus status;
+    status.level = reader.readU16();
+    status.levelCount = reader.readU16();
+    status.wave = reader.readU8();
+    status.waveCount = reader.readU8();
+    status.bossHealth = reader.readU16();
+    status.bossMaxHealth = reader.readU16();
+    status.countdown = reader.readU8();
+    if (mode > toByte(GameMode::Endless) || difficulty > toByte(Difficulty::Hard) ||
+        phase > toByte(GamePhase::GameOver) || status.wave > status.waveCount ||
+        status.bossHealth > status.bossMaxHealth ||
+        (status.levelCount != 0 && status.level > status.levelCount)) {
+      return DecodeError::InvalidValue;
+    }
+    status.mode = static_cast<GameMode>(mode);
+    status.difficulty = static_cast<Difficulty>(difficulty);
+    status.phase = static_cast<GamePhase>(phase);
+    payload = status;
+    return DecodeError::None;
+  }
+
+  case PacketType::LevelInfo: {
+    LevelInfo info;
+    info.level = reader.readU16();
+    info.theme = reader.readU8();
+    const std::size_t titleLength = reader.readU8();
+    // Both lengths are checked against what is left before a single byte of text is read.
+    if (!reader.ok() || titleLength > MAX_TITLE_LENGTH || reader.remaining() < titleLength + 2) {
+      return DecodeError::SizeMismatch;
+    }
+    if (!readText(reader, titleLength, info.title)) {
+      return DecodeError::InvalidValue;
+    }
+    const std::size_t storyLength = reader.readU16();
+    if (!reader.ok() || storyLength > MAX_STORY_LENGTH || reader.remaining() != storyLength) {
+      return DecodeError::SizeMismatch;
+    }
+    if (!readText(reader, storyLength, info.story) || info.theme >= THEME_COUNT) {
+      return DecodeError::InvalidValue;
+    }
+    payload = std::move(info);
     return DecodeError::None;
   }
   }
@@ -321,9 +449,13 @@ PacketType packetTypeOf(const Payload& payload) {
           return PacketType::EntityDestroy;
         } else if constexpr (std::is_same_v<T, PlayerStatus>) {
           return PacketType::PlayerStatus;
-        } else {
-          static_assert(std::is_same_v<T, PlayerLeft>, "every payload needs a packet type");
+        } else if constexpr (std::is_same_v<T, PlayerLeft>) {
           return PacketType::PlayerLeft;
+        } else if constexpr (std::is_same_v<T, GameStatus>) {
+          return PacketType::GameStatus;
+        } else {
+          static_assert(std::is_same_v<T, LevelInfo>, "every payload needs a packet type");
+          return PacketType::LevelInfo;
         }
       },
       payload);
