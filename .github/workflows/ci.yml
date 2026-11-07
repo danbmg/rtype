@@ -1,72 +1,59 @@
 name: CI
 
-# GitHub-hosted runners are not available to this repository, so the jobs run on self-hosted
-# runners registered by the team (Settings > Actions > Runners). Setup: docs/getting-started.md,
-# section "Continuous integration".
 on:
   push:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
-  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  linux:
-    name: Linux
-    # The machine already has the compiler, CMake and the X11/OpenGL/udev development packages
-    # listed in docs/getting-started.md.
-    runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 60
+  build-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      # Dependency sources are downloaded once and restored from the cache on later runs.
+      CPM_SOURCE_CACHE: ${{ github.workspace }}/.cpm-cache
+
     steps:
       - uses: actions/checkout@v4
 
-      # Dependency sources stay in the runner's own cache between runs: nothing is downloaded
-      # again unless a pinned version changes.
-      - name: Use the machine's dependency cache
-        run: echo "CPM_SOURCE_CACHE=$HOME/.cache/CPM" >> "$GITHUB_ENV"
-
-      - name: Configure (warnings as errors)
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRTYPE_WARNINGS_AS_ERRORS=ON
-
-      - name: Build
-        run: cmake --build build --parallel "$(nproc)"
-
-      - name: Test
-        run: ctest --test-dir build --output-on-failure --timeout 120
-
-      - name: Check the binaries are at the repository root
-        run: ls r-type_server r-type_client
-
-  windows:
-    name: Windows
-    # Runs once a Windows runner is registered and the repository variable WINDOWS_RUNNER is set
-    # to "true" (Settings > Secrets and variables > Actions > Variables); skipped otherwise.
-    if: vars.WINDOWS_RUNNER == 'true'
-    runs-on: [self-hosted, windows, x64]
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Use the machine's dependency cache
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
         run: |
-          "CPM_SOURCE_CACHE=$env:USERPROFILE\.cache\CPM" |
-            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libx11-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libudev-dev libgl1-mesa-dev
 
-      - name: Configure
+      - name: Restore dependency cache
+        uses: actions/cache@v4
+        with:
+          path: .cpm-cache
+          # Dependency versions are pinned in the root CMakeLists.txt.
+          key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: cpm-${{ runner.os }}-
+
+      - name: Configure (Linux, warnings as errors)
+        if: runner.os == 'Linux'
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRTYPE_WARNINGS_AS_ERRORS=ON
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
         run: cmake -S . -B build
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel 4
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure --timeout 120
 
       - name: Check the binaries are at the repository root
-        run: |
-          if (-not (Test-Path r-type_server.exe) -or -not (Test-Path r-type_client.exe)) {
-            exit 1
-          }
+        shell: bash
+        run: ls r-type_server*

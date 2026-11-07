@@ -2,7 +2,6 @@ name: Docs
 
 # Builds the documentation site on every PR (broken links fail the build) and publishes it to
 # GitHub Pages from main. Repository settings: Pages > Source = "GitHub Actions".
-# Runs on the team's self-hosted Linux runner, like the CI (see ci.yml).
 on:
   push:
     branches: [main]
@@ -21,8 +20,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 15
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -38,8 +36,7 @@ jobs:
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
-    runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
