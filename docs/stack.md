@@ -27,7 +27,7 @@ the summary; the three detailed studies give the full comparison for their area:
 | Tests | **Catch2 3** | GoogleTest, doctest | Test names are plain sentences ("A flooding client is rate limited"), each test is registered in CTest automatically, fetched by CPM like the rest | — |
 | Code style | **clang-format, clang-tidy** | none, a written style guide | One shared configuration at the root; formatting is never discussed in review | — |
 | Continuous integration | **GitHub Actions** | GitLab CI, Jenkins | The code is on GitHub; hosted Linux and Windows machines; dependency cache keyed on the CMake files | — |
-| Documentation | **MkDocs + Material** | Docusaurus, Sphinx, Doxygen, a wiki | Markdown files next to the code, reviewed in the same pull requests; search, outline, dark mode and Mermaid diagrams built in; a Python tool only. Doxygen alone is not enough for the subject; a wiki is not versioned with the code | — |
+| Documentation | **MkDocs + Material** | Docusaurus, Sphinx, Doxygen, a wiki | Markdown files next to the code, reviewed in the same pull requests; search, outline, dark mode and Mermaid diagrams built in; a Python tool only. Doxygen alone lists the classes but does not explain the architecture; a wiki is not versioned with the code | — |
 
 We use no game engine and no library with a too broad scope (Unity, Unreal, Godot…):
 the ECS, the game loop, the network layer and the protocol are ours. Third-party code is limited
