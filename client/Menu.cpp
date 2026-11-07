@@ -18,7 +18,7 @@ constexpr std::array<const char*, ITEM_COUNT> LABELS{
     "SOUND VOLUME", "TEXT SIZE",  "SOUND CAPTIONS", "SCREEN SHAKE", "JOIN THE GAME"};
 constexpr std::array<const char*, ITEM_COUNT> HELP{
     "Story: 10 levels to save the Cup. Endless: waves forever. The first player chooses.",
-    "Easy: 5 lives, weaker and slower enemies. Hard: 2 lives, tougher enemies.",
+    "Easy: 5 lives. Hard: 2 lives. Tutorial (story only): no game over, F3 skips a level.",
     "LEFT/RIGHT: arrows, WASD or ZQSD. ENTER: bind each action to any key.",
     "Your ship fires on its own: no key to hold.",
     "Volume of the music, 0 to 100.",
@@ -40,7 +40,7 @@ std::string valueOf(Menu::Item item, const Settings& settings) {
   switch (item) {
   case Menu::Item::Mode: return settings.mode == protocol::GameMode::Story ? "STORY" : "ENDLESS";
   case Menu::Item::Difficulty: {
-    constexpr std::array NAMES{"EASY", "NORMAL", "HARD"};
+    constexpr std::array NAMES{"EASY", "NORMAL", "HARD", "TUTORIAL"};
     return NAMES.at(static_cast<std::size_t>(settings.difficulty));
   }
   case Menu::Item::Controls: {
@@ -70,9 +70,16 @@ void Menu::change(Settings& settings, int direction) {
   case Item::Mode:
     settings.mode = settings.mode == protocol::GameMode::Story ? protocol::GameMode::Endless
                                                                : protocol::GameMode::Story;
+    if (settings.mode != protocol::GameMode::Story &&
+        settings.difficulty == protocol::Difficulty::Tutorial) {
+      settings.difficulty = protocol::Difficulty::Normal; // the tutorial is for the story only
+    }
     break;
   case Item::Difficulty: {
-    const int next = std::clamp(static_cast<int>(settings.difficulty) + direction, 0, 2);
+    const auto last = settings.mode == protocol::GameMode::Story ? protocol::Difficulty::Tutorial
+                                                                 : protocol::Difficulty::Hard;
+    const int next =
+        std::clamp(static_cast<int>(settings.difficulty) + direction, 0, static_cast<int>(last));
     settings.difficulty = static_cast<protocol::Difficulty>(next);
     break;
   }

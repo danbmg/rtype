@@ -171,6 +171,12 @@ void NetworkClient::sendInput(const InputState& input) {
   send(protocol::Input{flags});
 }
 
+void NetworkClient::requestSkipLevel() {
+  if (_state == ConnectionState::Connected && _gameStatus.level > 0) {
+    send(protocol::SkipLevel{_gameStatus.level});
+  }
+}
+
 std::vector<NetworkEvent> NetworkClient::pollEvents() {
   std::vector<NetworkEvent> events(std::make_move_iterator(_events.begin()),
                                    std::make_move_iterator(_events.end()));

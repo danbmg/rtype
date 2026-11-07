@@ -371,7 +371,11 @@ void Scene::reactToPlayers(const net::NetworkClient& network, engine::audio::IAu
     }
     const bool hadShield = (previous->flags & protocol::player::SHIELD) != 0;
     const bool hasShield = (player.flags & protocol::player::SHIELD) != 0;
-    if (player.lives < previous->lives || player.health < previous->health) {
+    // A ship turns invulnerable when it respawns: a life was lost, even if the tutorial gave it
+    // back on the same tick (lives unchanged, health full again).
+    const bool respawned = (previous->flags & protocol::player::INVULNERABLE) == 0 &&
+                           (player.flags & protocol::player::INVULNERABLE) != 0;
+    if (player.lives < previous->lives || player.health < previous->health || respawned) {
       _hitFlash[player.playerId] = 0.35F;
       hit = true;
       if (player.playerId == network.playerId()) {
@@ -381,11 +385,12 @@ void Scene::reactToPlayers(const net::NetworkClient& network, engine::audio::IAu
     } else if (hadShield && !hasShield) {
       shieldDown = true;
     }
-    if (inPlay && (player.lives > previous->lives ||
-                   (player.weapon != previous->weapon && player.weapon != 0) ||
-                   player.rapidFireMilliseconds > previous->rapidFireMilliseconds + 1000 ||
-                   (hasShield && !hadShield) ||
-                   (player.health > previous->health && player.lives == previous->lives))) {
+    if (inPlay &&
+        (player.lives > previous->lives ||
+         (player.weapon != previous->weapon && player.weapon != 0) ||
+         player.rapidFireMilliseconds > previous->rapidFireMilliseconds + 1000 ||
+         (hasShield && !hadShield) ||
+         (player.health > previous->health && player.lives == previous->lives && !respawned))) {
       pickup = true;
     }
   }
@@ -627,6 +632,8 @@ void Scene::drawHud(IRenderer& renderer, const net::NetworkClient& network,
                     const Settings& settings) const {
   const unsigned int big = settings.largeText ? 17U : 15U;
   const unsigned int small = settings.largeText ? 15U : 13U;
+  // Tutorial: the server gives every lost life back, so the count means nothing.
+  const bool tutorial = network.gameStatus().difficulty == protocol::Difficulty::Tutorial;
   renderer.drawRectangle(0, 0, FIELD_WIDTH, FIELD_TOP, {10, 14, 30});
   renderer.drawRectangle(0, FIELD_TOP - 2.0F, FIELD_WIDTH, 2, {40, 50, 90});
   for (std::uint8_t id = 0; id < protocol::MAX_PLAYERS; ++id) {
@@ -652,7 +659,7 @@ void Scene::drawHud(IRenderer& renderer, const net::NetworkClient& network,
     }
     // Lives as small ships, health as pips.
     renderer.drawSprite("ships", {66, static_cast<int>(id) * 17, 33, 17}, x, 24, 22, 11);
-    renderer.drawText("x" + std::to_string(player->lives), x + 24.0F, 20, small);
+    renderer.drawText(tutorial ? "INF" : "x" + std::to_string(player->lives), x + 24.0F, 20, small);
     for (int pip = 0; pip < 3; ++pip) {
       const bool full = pip < player->health;
       renderer.drawRectangle(x + 50.0F + static_cast<float>(pip) * 11.0F, 25, 9, 9,
@@ -676,7 +683,7 @@ void Scene::drawHud(IRenderer& renderer, const net::NetworkClient& network,
   const auto& info = network.levelInfo();
   renderer.drawRectangle(0, FIELD_TOP + FIELD_HEIGHT, FIELD_WIDTH, 24, {10, 14, 30});
   std::string where = status.mode == protocol::GameMode::Story ? "STORY" : "ENDLESS";
-  constexpr std::array DIFFICULTIES{"EASY", "NORMAL", "HARD"};
+  constexpr std::array DIFFICULTIES{"EASY", "NORMAL", "HARD", "TUTORIAL (F3 SKIPS)"};
   where += std::string("  ") + DIFFICULTIES.at(static_cast<std::size_t>(status.difficulty));
   if (status.level > 0) {
     where += "  LEVEL " + std::to_string(status.level) +

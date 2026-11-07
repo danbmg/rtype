@@ -32,7 +32,8 @@ bool isNewer(std::uint32_t sequence, std::uint32_t reference) {
 
 bool isClientToServer(protocol::PacketType type) {
   return type == protocol::PacketType::Connect || type == protocol::PacketType::Input ||
-         type == protocol::PacketType::Ping || type == protocol::PacketType::Disconnect;
+         type == protocol::PacketType::Ping || type == protocol::PacketType::Disconnect ||
+         type == protocol::PacketType::SkipLevel;
 }
 
 template<typename State>
@@ -204,6 +205,12 @@ void Server::handlePacket(const Incoming& incoming, Clock::time_point now) {
     }
   } else if (const auto* ping = std::get_if<protocol::Ping>(&packet.payload)) {
     sendTo(*session, protocol::Pong{ping->token});
+  } else if (const auto* skip = std::get_if<protocol::SkipLevel>(&packet.payload)) {
+    // The server decides: outside a tutorial, or for a level already behind, nothing happens.
+    if (_world.skipLevel(skip->level)) {
+      Logger::info("player " + std::to_string(session->playerId + 1) + " skipped level " +
+                   std::to_string(skip->level) + " (tutorial)");
+    }
   } else if (std::holds_alternative<protocol::Disconnect>(packet.payload)) {
     if (auto removed = _sessions.remove(from)) {
       closeSession(*removed, protocol::LeaveReason::Quit);

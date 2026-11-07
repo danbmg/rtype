@@ -35,7 +35,8 @@ std::uint8_t secondsLeft(float seconds) {
 
 game::Difficulty toGame(protocol::Difficulty difficulty) {
   switch (difficulty) {
-  case protocol::Difficulty::Easy: return game::Difficulty::Easy;
+  case protocol::Difficulty::Easy:
+  case protocol::Difficulty::Tutorial: return game::Difficulty::Easy;
   case protocol::Difficulty::Hard: return game::Difficulty::Hard;
   case protocol::Difficulty::Normal: break;
   }
@@ -103,8 +104,16 @@ GameWorld::GameWorld(std::uint8_t tickRate, std::uint32_t seed, game::WorldBound
 }
 
 void GameWorld::requestGame(protocol::GameMode mode, protocol::Difficulty difficulty) {
+  if (difficulty == protocol::Difficulty::Tutorial && mode != protocol::GameMode::Story) {
+    difficulty = protocol::Difficulty::Normal;
+  }
   _requestedMode = mode;
   _requestedDifficulty = difficulty;
+}
+
+bool GameWorld::isTutorial() const {
+  return _state != State::Lobby && _mode == protocol::GameMode::Story &&
+         _difficulty == protocol::Difficulty::Tutorial;
 }
 
 void GameWorld::startGame() {
@@ -257,6 +266,9 @@ void GameWorld::step() {
     _levels->update(_registry, tickSeconds);
   }
   _scheduler.run(_registry);
+  if (isTutorial()) {
+    refundLives();
+  }
   ++_tick;
   refreshPlayerStates();
 
@@ -285,6 +297,37 @@ void GameWorld::step() {
 void GameWorld::loadLevel(std::uint32_t number) {
   _levels->loadLevel(_registry, number);
   trackLevel();
+}
+
+bool GameWorld::skipLevel(std::uint32_t level) {
+  if (_state != State::Running || !isTutorial()) {
+    return false;
+  }
+  const auto& progress = _levels->progress();
+  if (progress.level != level || progress.phase == game::LevelPhase::Complete) {
+    return false; // stale or duplicated request: that level is already behind
+  }
+  const auto last = _levels->catalog().finalLevel();
+  if (last && level >= *last) {
+    clearNonPlayers();
+    _state = State::Victory;
+    _stateSeconds = VICTORY_SECONDS;
+    return true;
+  }
+  loadLevel(level + 1);
+  return true;
+}
+
+// Tutorial: lives never drop below their starting value, a lost one comes back on the same
+// tick. The death system only removes a ship on its last life, so it always respawns.
+void GameWorld::refundLives() {
+  const int lives = game::difficultySettings(toGame(_difficulty)).playerLives;
+  for (const auto ship : _ships) {
+    auto* player = _registry.containsEntity(ship) ? _registry.getComponent<Player>(ship) : nullptr;
+    if (player != nullptr && player->lives < lives) {
+      player->lives = lives;
+    }
+  }
 }
 
 void GameWorld::refreshPlayerStates() {

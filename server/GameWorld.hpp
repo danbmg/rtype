@@ -24,6 +24,7 @@ namespace server {
 //   Lobby (nobody connected) --first player joins, with its mode and difficulty--> Running
 //   Running --every connected player out of lives--> GameOver --countdown--> Running (restart)
 //   Running --story completed (Cup picked up)--> Victory --countdown--> Running (restart)
+//   Running --tutorial: SKIP_LEVEL on the final level--> Victory
 //   any state --last player leaves--> Lobby
 class GameWorld {
 public:
@@ -39,7 +40,8 @@ public:
             game::GameContent content = {}, std::uint32_t initialLevel = 1);
 
   // What the next game will be. Only taken into account while nobody plays (lobby): players who
-  // join a running game play whatever is running.
+  // join a running game play whatever is running. Tutorial is for the story only: an endless
+  // game asked in tutorial is played in normal.
   void requestGame(rtype::protocol::GameMode mode, rtype::protocol::Difficulty difficulty);
 
   // Spawns the ship of a new player. The first player of an empty world starts the game.
@@ -71,6 +73,11 @@ public:
   const game::LevelProgress& levelProgress() const { return _levels->progress(); }
   const game::LevelDefinition& levelDefinition() const { return _levels->definition(); }
   void loadLevel(std::uint32_t number);
+  // A player asks to skip the level it sees. Honoured only in a running tutorial game while
+  // that level is still the current one: the next level starts, or the victory after the
+  // final one. Returns whether the level was skipped.
+  bool skipLevel(std::uint32_t level);
+  bool isTutorial() const;
   rtype::protocol::GamePhase phase() const { return gameStatus().phase; }
 
   std::uint32_t tick() const { return _tick; }
@@ -88,6 +95,7 @@ private:
   void clearNonPlayers();
   engine::ecs::Entity createShip(std::uint8_t playerId);
   bool everyoneIsOut() const;
+  void refundLives();
   void trackLevel();
 
   engine::ecs::Registry _registry;

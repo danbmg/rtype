@@ -22,10 +22,10 @@ using engine::input::Key;
 
 constexpr std::string_view USAGE =
     "Usage: r-type_client [-h host] [-p port] [--assets directory] [--mode story|endless]\n"
-    "                     [--difficulty easy|normal|hard] [--join] [--mute] [--help]\n"
+    "                     [--difficulty easy|normal|hard|tutorial] [--join] [--mute] [--help]\n"
     "Menu: UP/DOWN choose, LEFT/RIGHT change, ENTER join or rebind keys, ESCAPE quit\n"
     "In game: bound keys move and fire | F2 auto-fire | M mute | +/- volume | F1 larger text |\n"
-    "         ENTER continue when out | ESCAPE back to the menu";
+    "         ENTER continue when out | F3 skip the level (tutorial) | ESCAPE back to the menu";
 
 bool outOfLives(const client::net::NetworkClient& network) {
   for (const auto& player : network.players()) {
@@ -101,6 +101,11 @@ void run(const client::Options& options, engine::render::IRenderer& renderer,
       }
       if (input.pressed(Key::F2)) {
         settings.autoFire = !settings.autoFire;
+      }
+      // Only a request: the server decides, and honours it in a tutorial game only.
+      if (input.pressed(Key::F3) &&
+          network.gameStatus().difficulty == rtype::protocol::Difficulty::Tutorial) {
+        network.requestSkipLevel();
       }
       if (input.pressed(Key::M)) {
         settings.muted = !settings.muted;

@@ -34,6 +34,8 @@ Options parseOptions(std::span<const std::string_view> arguments,
         options.difficulty = rtype::protocol::Difficulty::Normal;
       } else if (flag == "--difficulty" && value == "hard") {
         options.difficulty = rtype::protocol::Difficulty::Hard;
+      } else if (flag == "--difficulty" && value == "tutorial") {
+        options.difficulty = rtype::protocol::Difficulty::Tutorial;
       } else {
         throw std::invalid_argument("Invalid value for " + std::string(flag) + ": " +
                                     std::string(value));
