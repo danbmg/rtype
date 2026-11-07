@@ -1,10 +1,12 @@
 #include <algorithm>
 #include <map>
+#include <utility>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include "server/GameWorld.hpp"
 #include "game/EquipmentSystems.hpp"
+#include "game/EnemyBehaviors.hpp"
 
 namespace protocol = rtype::protocol;
 using namespace rtype::common::components;
@@ -132,11 +134,18 @@ TEST_CASE("Player status follows lives and score, and survives the ship", "[serv
   CHECK(world.playerStates().empty());
 }
 
-TEST_CASE("Bydos keep coming even with nobody connected", "[server][world]") {
+TEST_CASE("The world waits in the lobby, and the waves start when a player joins",
+          "[server][world]") {
   GameWorld world(TICK_RATE, 7U);
   runTicks(world, 3 * TICK_RATE);
-  CHECK(countKind(world.snapshot(), protocol::EntityKind::Bydos) >= 2);
+  CHECK(world.snapshot().empty());
+  CHECK(world.phase() == protocol::GamePhase::Lobby);
   CHECK(world.tick() == 3U * TICK_RATE);
+
+  world.spawnPlayer(0);
+  runTicks(world, 3 * TICK_RATE);
+  CHECK(countKind(world.snapshot(), protocol::EntityKind::Bydos) >= 2);
+  CHECK(world.phase() == protocol::GamePhase::Playing);
 }
 
 TEST_CASE("GameWorld exposes and loads server levels without resetting players", "[server][world][levels]") {
@@ -167,7 +176,9 @@ TEST_CASE("GameWorld advances custom levels and replicates bosses", "[server][wo
   bossWave.fireChancePerSecond = 0.0F;
   level.waves.push_back(bossWave);
   catalog.define(level);
-  GameWorld world(TICK_RATE, 42U, {}, catalog);
+  game::GameContent content;
+  content.story = catalog;
+  GameWorld world(TICK_RATE, 42U, {}, content);
   const auto ship = world.spawnPlayer(0);
   world.registry().getComponent<Player>(ship)->score = 1234;
   world.step();
@@ -226,4 +237,207 @@ TEST_CASE("Server replicates bonus types, collection and equipment state", "[ser
   CHECK(world.registry().view<Pickup>().empty());
   CHECK(world.registry().getComponent<Equipment>(ship)->weapon == WeaponType::Spread);
   CHECK(world.registry().getComponent<Equipment>(ship)->rapidFireSeconds == 8.0F);
+}
+
+namespace {
+
+// A two-level story: a wave of one Bydos, then a final level whose boss drops the Cup.
+game::GameContent shortStory() {
+  game::GameContent content;
+  game::BossType thief;
+  thief.name = "thief";
+  thief.visual = Visual::FinalBoss;
+  thief.health = 5;
+  thief.trophy = true;
+  thief.phases.front().attacks.front() = game::BossAttack::Spread;
+  thief.phases.front().interval = 5.0F;
+  content.bosses.push_back(std::move(thief));
+
+  game::LevelDefinition first;
+  first.number = 1;
+  first.title = "First";
+  first.story = "Line one\nLine two";
+  first.theme = 2;
+  first.introSeconds = 0.5F;
+  first.nextLevelDelaySeconds = 0.1F;
+  game::WaveDefinition wave;
+  wave.enemyCount = 1;
+  wave.spawnIntervalSeconds = 0.1F;
+  wave.fireChancePerSecond = 0.0F;
+  first.waves = {wave};
+  content.story.define(first);
+
+  game::LevelDefinition last = first;
+  last.number = 2;
+  last.title = "Last";
+  game::WaveDefinition boss;
+  boss.boss = true;
+  boss.enemyCount = 1;
+  boss.spawnIntervalSeconds = 0.1F;
+  boss.bossType = "thief";
+  last.waves = {boss};
+  content.story.define(last);
+  content.story.setFinalLevel(2);
+  return content;
+}
+
+void killEnemies(GameWorld& world) {
+  for (const auto enemy : world.registry().view<Enemy>()) {
+    world.registry().getComponent<Health>(enemy)->current = 0;
+  }
+}
+
+} // namespace
+
+TEST_CASE("The first player chooses the game, later players join it", "[server][world][modes]") {
+  GameWorld world(TICK_RATE, 3U, {}, shortStory());
+  world.requestGame(protocol::GameMode::Endless, protocol::Difficulty::Hard);
+  world.spawnPlayer(0);
+  world.step();
+  auto status = world.gameStatus();
+  CHECK(status.mode == protocol::GameMode::Endless);
+  CHECK(status.difficulty == protocol::Difficulty::Hard);
+  CHECK(status.levelCount == 0); // endless: no end
+  CHECK(world.playerStates().front().lives == 2); // hard: two lives
+
+  // A second player asking for something else joins the running game.
+  world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Easy);
+  world.spawnPlayer(1);
+  world.step();
+  status = world.gameStatus();
+  CHECK(status.mode == protocol::GameMode::Endless);
+  CHECK(status.difficulty == protocol::Difficulty::Hard);
+  REQUIRE(world.playerStates().size() == 2);
+  CHECK(world.playerStates().back().lives == 2);
+}
+
+TEST_CASE("Easy mode gives more lives and weaker enemies", "[server][world][modes]") {
+  GameWorld world(TICK_RATE, 3U);
+  world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Easy);
+  world.spawnPlayer(0);
+  runTicks(world, TICK_RATE * 2);
+  CHECK(world.playerStates().front().lives == 5);
+  CHECK(world.gameStatus().difficulty == protocol::Difficulty::Easy);
+}
+
+TEST_CASE("Status and level info follow the story from intro to boss fight",
+          "[server][world][modes]") {
+  GameWorld world(TICK_RATE, 5U, {}, shortStory());
+  world.spawnPlayer(0);
+  world.step();
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Intro);
+  CHECK(world.gameStatus().countdown == 1);
+  CHECK(world.gameStatus().level == 1);
+  CHECK(world.gameStatus().levelCount == 2);
+  auto info = world.levelInfo();
+  CHECK(info.level == 1);
+  CHECK(info.title == "First");
+  CHECK(info.story == "Line one\nLine two");
+  CHECK(info.theme == 2);
+  const auto revision = world.levelRevision();
+
+  runTicks(world, TICK_RATE); // intro over, the Bydos spawns
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Playing);
+  killEnemies(world);
+  runTicks(world, TICK_RATE); // cleared, short pause, level 2 starts
+  CHECK(world.gameStatus().level == 2);
+  CHECK(world.levelRevision() != revision);
+  CHECK(world.levelInfo().title == "Last");
+  runTicks(world, TICK_RATE);
+  const auto status = world.gameStatus();
+  CHECK(status.phase == protocol::GamePhase::BossFight);
+  CHECK(status.bossMaxHealth == 5);
+  CHECK(status.bossHealth == 5);
+  CHECK(countKind(world.snapshot(), protocol::EntityKind::FinalBoss) == 1);
+}
+
+TEST_CASE("Catching the Summoner's Cup after the final boss wins the story",
+          "[server][world][modes]") {
+  GameWorld world(TICK_RATE, 5U, {}, shortStory(), 2);
+  const auto ship = world.spawnPlayer(0);
+  runTicks(world, TICK_RATE * 2);
+  REQUIRE(world.gameStatus().phase == protocol::GamePhase::BossFight);
+  killEnemies(world);
+  runTicks(world, 2);
+  // The Cup is waiting: the level is not over until someone flies into it.
+  const auto trophies = world.registry().view<Pickup>();
+  REQUIRE(trophies.size() == 1);
+  CHECK(countKind(world.snapshot(), protocol::EntityKind::Trophy) == 1);
+  runTicks(world, TICK_RATE);
+  CHECK(world.gameStatus().phase != protocol::GamePhase::Victory);
+
+  *world.registry().getComponent<Position>(ship) =
+      *world.registry().getComponent<Position>(trophies.front());
+  runTicks(world, 3);
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Victory);
+  CHECK(world.playerStates().front().score >= game::TROPHY_POINTS);
+  CHECK(world.gameStatus().countdown > 0);
+
+  // After the victory screen, a new story starts with everyone back in.
+  runTicks(world, static_cast<int>(GameWorld::VICTORY_SECONDS) * TICK_RATE + TICK_RATE);
+  CHECK(world.gameStatus().phase != protocol::GamePhase::Victory);
+  CHECK(world.playerStates().front().score == 0);
+  CHECK(world.registry().containsEntity(world.ship(0)));
+}
+
+TEST_CASE("When every player is out of lives the game restarts", "[server][world][modes]") {
+  GameWorld world(TICK_RATE, 9U, {}, shortStory());
+  const auto first = world.spawnPlayer(0);
+  const auto second = world.spawnPlayer(1);
+  world.step();
+  world.registry().getComponent<Player>(first)->lives = 1;
+  world.registry().getComponent<Health>(first)->current = 0;
+  world.step();
+  CHECK(world.gameStatus().phase != protocol::GamePhase::GameOver); // player 2 still flies
+
+  world.registry().getComponent<Player>(second)->lives = 1;
+  world.registry().getComponent<Health>(second)->current = 0;
+  world.step();
+  CHECK(world.gameStatus().phase == protocol::GamePhase::GameOver);
+  CHECK(world.gameStatus().countdown == static_cast<int>(GameWorld::GAME_OVER_SECONDS));
+
+  runTicks(world, static_cast<int>(GameWorld::GAME_OVER_SECONDS) * TICK_RATE + 1);
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Intro);
+  CHECK(world.gameStatus().level == 1);
+  for (const auto& state : world.playerStates()) {
+    CHECK(state.lives == 3);
+  }
+  // New ships: the server finds them by player id, so inputs keep working.
+  const auto ship = world.ship(1);
+  REQUIRE(world.registry().containsEntity(ship));
+  const auto start = *world.registry().getComponent<Position>(ship);
+  world.applyPlayerInput(1, protocol::input::RIGHT);
+  world.step();
+  CHECK(world.registry().getComponent<Position>(ship)->x > start.x);
+}
+
+TEST_CASE("The last player leaving sends the world back to the lobby", "[server][world][modes]") {
+  GameWorld world(TICK_RATE, 9U);
+  world.requestGame(protocol::GameMode::Endless, protocol::Difficulty::Easy);
+  const auto ship = world.spawnPlayer(0);
+  runTicks(world, TICK_RATE * 3);
+  CHECK_FALSE(world.snapshot().empty());
+  world.removePlayer(0, ship);
+  runTicks(world, 2);
+  CHECK(world.snapshot().empty());
+  CHECK(world.gameStatus().phase == protocol::GamePhase::Lobby);
+  // The next first player picks again.
+  world.requestGame(protocol::GameMode::Story, protocol::Difficulty::Normal);
+  world.spawnPlayer(2);
+  world.step();
+  CHECK(world.gameStatus().mode == protocol::GameMode::Story);
+}
+
+TEST_CASE("Shields and respawn invulnerability are reported to the clients",
+          "[server][world][equipment]") {
+  GameWorld world(TICK_RATE, 9U);
+  const auto ship = world.spawnPlayer(0);
+  game::applyPickup(world.registry(), ship, PickupType::Shield);
+  world.step();
+  CHECK(world.playerStates().front().flags == protocol::player::SHIELD);
+  world.registry().getComponent<Health>(ship)->current = 0;
+  world.step();
+  CHECK(world.playerStates().front().flags == protocol::player::INVULNERABLE);
+  runTicks(world, static_cast<int>(game::RESPAWN_INVULNERABLE_SECONDS) * TICK_RATE + 1);
+  CHECK(world.playerStates().front().flags == 0);
 }
