@@ -55,8 +55,9 @@ Start the server, then one client per player (up to four), each in its own termi
 
 In the client menu, choose the game mode and the difficulty, then **JOIN THE GAME** with
 **Enter**. Arrow keys move, **Space** fires, **F2** toggles auto-fire, **Escape** goes back to the
-menu. The keys can be changed in the menu (CONTROLS); see the [demo page](demo.md) for every
-command and key.
+menu. In story mode, the **TUTORIAL** difficulty gives unlimited lives and **F3** skips the level,
+to see every level quickly. The keys can be changed in the menu (CONTROLS); see the
+[demo page](demo.md) for every command and key.
 
 To play on a local network, start the server on one machine and give its address to `-h` on the
 others. The server listens on UDP: allow the port in the firewall of the server machine.

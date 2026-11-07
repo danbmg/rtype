@@ -69,8 +69,10 @@ flowchart LR
    difficulty, phase, level, wave, boss health, countdown).
 7. When a level starts, and every second: LEVEL_INFO (title, story, background theme).
 
-The first CONNECT on an empty server carries the game mode and difficulty of the new game
-(protocol version 3); later players join the game in progress. Inputs are applied by player id,
+The first CONNECT on an empty server carries the game mode and difficulty of the new game; later
+players join the game in progress. In a tutorial game (protocol version 4), `GameWorld` gives every
+lost life back after the gameplay systems run, and honours SKIP_LEVEL only if the level it names
+is still the current one, so a duplicated datagram never skips twice. Inputs are applied by player id,
 because ships are replaced when a game restarts after a game over or a victory.
 
 `GameWorld` is the only place where ECS components are translated into protocol terms

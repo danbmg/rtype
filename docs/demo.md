@@ -39,6 +39,7 @@ chooses the game, the others join it.
 | To show | Server | Client |
 | --- | --- | --- |
 | The story from the start | `./r-type_server` | `./r-type_client --join` |
+| Every level in a few minutes | `./r-type_server` | `./r-type_client --join --difficulty tutorial` |
 | The first boss (level 5) | `./r-type_server --level 5` | `./r-type_client --join` |
 | The final boss and the Cup (level 10) | `./r-type_server --level 10` | `./r-type_client --join --difficulty easy` |
 | Endless mode | `./r-type_server` | `./r-type_client --join --mode endless` |
@@ -46,6 +47,10 @@ chooses the game, the others join it.
 
 `--join` skips the menu. The client that joins first decides the mode and the difficulty, so
 start it before the bots.
+
+The **tutorial** difficulty (story only) is made for a tour of the features: nobody can lose, and
+**F3** skips the current level for every player. On the final level, F3 goes to the victory
+screen. The server alone decides: F3 does nothing in the other difficulties.
 
 ## 4. Fill the game with bots
 
@@ -95,6 +100,7 @@ On each player machine, with the server's address:
 | Enter | join, or rebind the keys on the CONTROLS line | continue when out of lives |
 | Escape | quit | back to the menu |
 | F2 | | auto-fire on/off |
+| F3 | | skip the level (tutorial only) |
 | F1 | | larger text |
 | M | | mute |
 | + / − | | volume |
