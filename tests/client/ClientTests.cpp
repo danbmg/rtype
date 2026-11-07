@@ -145,6 +145,36 @@ TEST_CASE("The menu changes the mode and difficulty sent to the server", "[clien
   CHECK(press(menu, settings, engine::input::Key::Escape) == client::Menu::Result::Quit);
 }
 
+TEST_CASE("The tutorial difficulty is offered in story mode only", "[client][menu][tutorial]") {
+  using engine::input::Key;
+  client::Menu menu;
+  client::Settings settings;
+  REQUIRE(settings.mode == rtype::protocol::GameMode::Story);
+  while (menu.selected() != client::Menu::Item::Difficulty) {
+    press(menu, settings, Key::Up);
+  }
+  for (int step = 0; step < 4; ++step) {
+    press(menu, settings, Key::Right);
+  }
+  CHECK(settings.difficulty == rtype::protocol::Difficulty::Tutorial); // the last one
+  CHECK(client::valueOf(client::Menu::Item::Difficulty, settings) == "TUTORIAL");
+
+  // Switching to endless leaves the tutorial, which endless cannot reach.
+  press(menu, settings, Key::Up);
+  press(menu, settings, Key::Right);
+  REQUIRE(settings.mode == rtype::protocol::GameMode::Endless);
+  CHECK(settings.difficulty == rtype::protocol::Difficulty::Normal);
+  press(menu, settings, Key::Down);
+  for (int step = 0; step < 4; ++step) {
+    press(menu, settings, Key::Right);
+  }
+  CHECK(settings.difficulty == rtype::protocol::Difficulty::Hard);
+
+  const std::array<std::string_view, 2> args{"--difficulty", "tutorial"};
+  CHECK(client::parseOptions(args, "r-type_client").difficulty ==
+        rtype::protocol::Difficulty::Tutorial);
+}
+
 TEST_CASE("Every action can be bound to any key", "[client][menu][accessibility]") {
   using engine::input::Key;
   client::Menu menu;
