@@ -1,0 +1,12 @@
+{
+  "title": "Swiss Stage: Elimination Match",
+  "story": "Lose here and the Cup is gone for good.\nGun platforms drift in with the debris and fire in volleys.\nTake them down before they line up their shots.",
+  "theme": 3,
+  "waves": [
+    { "enemy": "turret", "count": 3, "interval": 1.5, "formation": "stairs" },
+    { "enemy": "drone", "count": 10, "interval": 0.4 },
+    { "enemy": "zigzag", "count": 6, "interval": 0.7, "formation": "line" },
+    { "enemy": "turret", "count": 4, "interval": 1.2, "formation": "v" },
+    { "enemy": "charger", "count": 8, "interval": 0.5 }
+  ]
+}

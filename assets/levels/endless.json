@@ -1,0 +1,10 @@
+// Endless mode: levels are generated forever, harder each time.
+// Enemies join the mix in this order; a named boss closes every `bossEvery` levels.
+{
+  "title": "Endless - Round",
+  "enemies": ["drone", "waver", "charger", "zigzag", "heavy-drone", "turret"],
+  "bosses": ["gatekeeper", "cup-thief"],
+  "bossEvery": 3,
+  "wavesPerLevel": 5,
+  "intro": 3
+}

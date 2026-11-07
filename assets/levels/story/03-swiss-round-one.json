@@ -1,0 +1,12 @@
+{
+  "title": "Swiss Stage: Round One",
+  "story": "Every round counts in the Swiss Stage.\nThe Bydos send chargers: kamikaze ships that dive straight at you.\nKeep moving and shoot them first!",
+  "theme": 2,
+  "waves": [
+    { "enemy": "charger", "count": 5, "interval": 1.0 },
+    { "enemy": "drone", "count": 8, "interval": 0.5, "formation": "v" },
+    { "enemy": "charger", "count": 8, "interval": 0.6, "formation": "stairs" },
+    { "enemy": "waver", "count": 6, "interval": 0.6 },
+    { "enemy": "heavy-drone", "count": 4, "interval": 1.0, "formation": "line" }
+  ]
+}

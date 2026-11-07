@@ -56,6 +56,14 @@ if(RTYPE_BUILD_CLIENT)
     OPTIONS "SFML_BUILD_NETWORK OFF" "SFML_USE_SYSTEM_DEPS OFF" "BUILD_SHARED_LIBS OFF")
 endif()
 
+# nlohmann/json — header-only JSON parser for the data-driven game content (levels, enemies,
+# bosses). Only game/ links it. The release archive holds just the headers and CMake files, and
+# its SHA256 is checked like CPM.cmake's.
+CPMAddPackage(NAME nlohmann_json VERSION 3.11.3
+  URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+  URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d
+  OPTIONS "JSON_BuildTests OFF" "JSON_Install OFF")
+
 if(RTYPE_BUILD_TESTS)
   CPMAddPackage("gh:catchorg/Catch2@3.8.1")
   list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)

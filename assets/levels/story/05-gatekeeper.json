@@ -1,0 +1,12 @@
+// First boss of the story: a boss wave is just { "boss": "<name from enemies.json>" }.
+{
+  "title": "Quarterfinal: The Gatekeeper",
+  "story": "A colossal guardian blocks the gate to the Bydos sector.\nIt summons chargers when wounded and fills the sky when cornered.\nBring it down and the road to the Cup is open!",
+  "theme": 4,
+  "intro": 5,
+  "waves": [
+    { "enemy": "drone", "count": 8, "interval": 0.5, "formation": "line" },
+    { "enemy": "zigzag", "count": 6, "interval": 0.6 },
+    { "boss": "gatekeeper" }
+  ]
+}

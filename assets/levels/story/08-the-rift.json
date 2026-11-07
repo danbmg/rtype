@@ -1,0 +1,12 @@
+{
+  "title": "Finals Approach: The Rift",
+  "story": "The Bydos open a rift in space to escape.\nEverything they have comes through it at once. Do not let them close it!",
+  "theme": 2,
+  "waves": [
+    { "enemy": "charger", "count": 10, "interval": 0.4, "formation": "stairs" },
+    { "enemy": "zigzag", "count": 10, "interval": 0.4 },
+    { "enemy": "turret", "count": 5, "interval": 0.9, "formation": "v" },
+    { "enemy": "waver", "count": 12, "interval": 0.35, "formation": "line" },
+    { "enemy": "heavy-drone", "count": 6, "interval": 0.6 }
+  ]
+}

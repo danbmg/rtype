@@ -1,0 +1,13 @@
+// Level 1: a gentle start. Waves run in order; "interval" is the time between two spawns.
+{
+  "title": "Worlds Final: The Heist",
+  "story": "Worlds 2026, Grand Final. The Summoner's Cup shines on stage...\nThen the lights go out. When they come back, the Cup is gone!\nA Bydos raiding fleet is fleeing into deep space with it.\nT1 scrambles its four fighters. Give chase!",
+  "theme": 0,
+  "intro": 6,
+  "waves": [
+    { "enemy": "drone", "count": 5, "interval": 0.8, "formation": "line" },
+    { "enemy": "drone", "count": 8, "interval": 0.7 },
+    { "enemy": "waver", "count": 5, "interval": 0.9, "formation": "v" },
+    { "enemy": "drone", "count": 8, "interval": 0.5, "formation": "stairs" }
+  ]
+}

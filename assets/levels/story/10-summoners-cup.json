@@ -1,0 +1,12 @@
+// Last level: beating the cup-thief drops the Summoner's Cup. Fly into it to win.
+{
+  "title": "The Summoner's Cup",
+  "story": "The thief holds the Summoner's Cup in its claws.\nWin this fight, catch the Cup, and bring the trophy home.\nT1, this is for the fans!",
+  "theme": 4,
+  "intro": 6,
+  "waves": [
+    { "enemy": "waver", "count": 8, "interval": 0.5, "formation": "v" },
+    { "enemy": "charger", "count": 8, "interval": 0.5 },
+    { "boss": "cup-thief" }
+  ]
+}
