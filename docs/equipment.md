@@ -5,8 +5,9 @@ they cannot grant bonuses or select a weapon through a network command.
 
 ## Shared components
 
-`common/components/Equipment.hpp` defines `Equipment` (weapon and rapid-fire timer),
-`Pickup` (collectible type and lifetime), and `LootDrop` (an enemy's assigned drop).
+`common/components/Equipment.hpp` defines `Equipment` (weapon, rapid-fire, shield and
+invulnerability timers), `Pickup` (collectible type and lifetime), and `LootDrop` (an enemy's
+assigned drop).
 
 | Weapon | Projectiles per volley | Damage per projectile | Cooldown |
 | --- | --- | --- | --- |
@@ -26,20 +27,26 @@ player ID and use the existing collisions and scoring. Heavy shots do not pierce
 | DoubleShot | Equip Double |
 | SpreadShot | Equip Spread |
 | HeavyShot | Equip Heavy |
+| Shield | Absorb the next enemy shot or collision; lasts 12 seconds at most |
+| Trophy | The Summoner's Cup: +10000 points; catching it completes the story (see [game design](game-design.md)) |
 
 Weapon pickups replace the current weapon. Rapid fire works with every weapon and collecting
 it again refreshes its timer to 8 seconds. Losing a life resets the weapon to Standard and
-cancels rapid fire. Level changes preserve equipment; timers continue during pauses.
+cancels rapid fire and the shield. After losing a life, a ship is invulnerable for 2 seconds:
+enemy shots fly through it and collisions do nothing. Level changes preserve equipment; timers
+continue during pauses.
 
 ## Drops and collection
 
 `WaveDefinition::pickupDropChance` is a probability in [0, 1], defaulting to 0.2. Bosses always
 receive loot. The level director uses the campaign's seeded RNG to assign drops at enemy
-spawn, choosing uniformly among the six types. Death cleanup emits the item at the enemy's
+spawn, choosing uniformly among the seven regular types (extra life to shield). The final
+boss of a finite campaign drops the Trophy instead; in endless mode it drops a regular item. Death cleanup emits the item at the enemy's
 last position, including deaths from contact. Escaping enemies never drop loot.
 
 Items have a 20 × 20 hitbox, drift left at 45 world units/s, and expire after 12 seconds or
-when they leave the screen. The first overlapping living player collects an item, which is
+when they leave the screen. The Trophy is different: 40 × 40, it stays where the boss fell and
+never expires, and the level is not cleared until a player catches it. The first overlapping living player collects an item, which is
 removed immediately. Dead ships cannot collect. Items are consumed even at full health or
 the lives cap.
 
@@ -70,12 +77,11 @@ collisions, before player deaths. New drops can be collected on the following ti
 
 ## Network and client integration
 
-Protocol **2** introduces item entity kinds 6–11 and appends `weapon` (u8) and
-`rapidFireMilliseconds` (u16) to `PlayerState`, now 10 bytes. Existing lives and health fields
-report healing and extra lives. Normal entity packets replicate item positions and removals.
-See the [protocol RFC](protocol/rfc.md).
+Protocol **2** introduced item entity kinds 6–11 and the `weapon` and `rapidFireMilliseconds`
+fields of `PlayerState`. Protocol **3** adds the Shield (12) and Trophy (13) kinds and a `flags`
+byte (shield up, invulnerable), so `PlayerState` is 11 bytes. Normal entity packets replicate
+item positions and removals. See the [protocol RFC](protocol/rfc.md).
 
-Rebuild both client and server. The network client retains the decoded equipment fields;
-the graphical client can use them for collectibles and its HUD. This change adds no pickup
-textures, drawings or equipment HUD. Every weapon uses the existing player-projectile entity
-kind, so dedicated projectile visuals can be added separately.
+The graphical client draws each item as a capsule with a letter (`assets/pickups.png`), the
+Cup with a glow and a "catch the Cup" label, a bubble around shielded ships and a blinking ship
+while invulnerable. Its HUD shows the weapon, the shield and a rapid-fire bar per player.

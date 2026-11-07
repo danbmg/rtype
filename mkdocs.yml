@@ -63,13 +63,14 @@ validation:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Run a demo: demo.md
   - How it works:
       - Architecture overview: architecture.md
       - Engine and gameplay: matraphlu-engine.md
       - Network and server: network.md
+      - Game design: game-design.md
       - Levels and waves: levels.md
       - Weapons and bonuses: equipment.md
-      - Graphical client: theodsh-client.md
   - Protocol RFC: protocol/rfc.md
   - Technical choices:
       - Stack overview: stack.md
@@ -78,5 +79,6 @@ nav:
       - Networking, storage and security: network-study.md
   - Accessibility: accessibility.md
   - Tutorials:
+      - Add a level, an enemy or a boss: content-guide.md
       - Headless Pong: pong-tutorial.md
   - Glossary: glossary.md

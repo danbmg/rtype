@@ -51,7 +51,7 @@ graphics library, and the client never runs gameplay rules. The
 | How it works | [Architecture overview](architecture.md) | layers, modules, threads, one key press from keyboard to screen, code tour |
 | | [Engine and gameplay](matraphlu-engine.md) | ECS, core tools, gameplay systems and their order |
 | | [Network and server](network.md) | server threads, one tick, `NetworkClient`, adding a packet, robustness |
-| | [Graphical client](theodsh-client.md) | client loop, rendering, controls, one frame explained |
+| | [Game design](game-design.md) | modes, story, enemies, bosses, power-ups, presentation |
 | Protocol | [Protocol RFC](protocol/rfc.md) | the wire format, every packet, exchanges, validation rules |
 | Technical choices | [Stack overview](stack.md) | every technology, the alternatives, why we chose it |
 | | [Engine, build and dependencies](architecture-study.md) | ECS data layout, CMake, CPM |

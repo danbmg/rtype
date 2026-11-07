@@ -61,13 +61,13 @@ linked *privately* to `engine/network`, so no other module can include it; SFML 
 | `engine/core` | fixed timestep, event bus, logger, scheduler, resource cache, console, metrics | matraphlu | [Engine and gameplay](matraphlu-engine.md) |
 | `engine/ecs` | `Entity`, `SparseArray`, `Registry` | matraphlu | [Engine and gameplay](matraphlu-engine.md) |
 | `engine/network` | `UdpSocket` over Asio, `BinaryWriter` / `BinaryReader`, `ThreadSafeQueue` | danbmg | [Network and server](network.md) |
-| `engine/render`, `input`, `audio` | `IRenderer`, `IInput`, `IAudio` and their SFML implementations | theodsh | [Graphical client](theodsh-client.md) |
+| `engine/render`, `input`, `audio` | `IRenderer`, `IInput`, `IAudio` and their SFML implementations | theodsh | [Game design](game-design.md#how-it-is-built) |
 | `common/components` | plain data: `Position`, `Velocity`, `Hitbox`, `Health`, `Player`, `Enemy`, `Projectile`… | matraphlu | [Engine and gameplay](matraphlu-engine.md) |
 | `common/protocol` | `Packets.hpp` (the wire contract) and `PacketCodec` | danbmg | [Protocol RFC](protocol/rfc.md) |
 | `game/` | the gameplay systems: waves, movement, collisions, damage, score | matraphlu | [Engine and gameplay](matraphlu-engine.md) |
 | `server/` | `Server`, `SessionManager`, `GameWorld`, `r-type_server` | danbmg | [Network and server](network.md) |
 | `client/net` | `NetworkClient` and the `r-type_bot` test client | danbmg | [Network and server](network.md#using-networkclient-in-the-graphical-client) |
-| `client/` | application loop, `Scene`, command line options | theodsh | [Graphical client](theodsh-client.md) |
+| `client/` | application loop, `Scene`, command line options | theodsh | [Game design](game-design.md#how-it-is-built) |
 
 ## Who decides what
 
@@ -133,7 +133,7 @@ sequenceDiagram
 **Worst-case delay, from the constants:** up to 17 ms before the next server tick, up to 33 ms
 before the next snapshot, up to 17 ms before the next client frame: about 67 ms plus the network
 transit time. Smoothing positions between snapshots (interpolation) and predicting the local ship
-are part 2 work.
+are planned.
 
 ## Threads and shared data
 

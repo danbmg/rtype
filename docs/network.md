@@ -65,7 +65,13 @@ flowchart LR
 3. Apply each session's input flags to its ship (movement, fire with a 0.25 s cooldown).
 4. `GameWorld::step()`: the `game/` systems (enemy waves, movement, collisions, deaths, cleanup).
 5. Compare the world with the previous tick: send ENTITY_SPAWN and ENTITY_DESTROY.
-6. Every 2 ticks: ENTITY_UPDATE with every entity, and PLAYER_STATUS.
+6. Every 2 ticks: ENTITY_UPDATE with every entity, PLAYER_STATUS and GAME_STATUS (mode,
+   difficulty, phase, level, wave, boss health, countdown).
+7. When a level starts, and every second: LEVEL_INFO (title, story, background theme).
+
+The first CONNECT on an empty server carries the game mode and difficulty of the new game
+(protocol version 3); later players join the game in progress. Inputs are applied by player id,
+because ships are replaced when a game restarts after a game over or a victory.
 
 `GameWorld` is the only place where ECS components are translated into protocol terms
 (`EntityKind`, player ids): the gameplay code stays unaware of the network.
@@ -113,7 +119,7 @@ while (window.isOpen()) {
 
 Everything runs on the thread that calls `update()`; the network thread only fills a queue. The
 client draws what the server reports and decides nothing about the game. Entity positions are
-updated 30 times per second; smoothing them between snapshots (interpolation) is part 2 work.
+updated 30 times per second; smoothing them between snapshots (interpolation) is planned.
 
 ## Adding a packet type
 
@@ -152,7 +158,10 @@ ctest --test-dir build --output-on-failure       # unit and integration tests
 ```
 
 `r-type_bot` connects up to 8 bots (more than 4 shows the REJECT), flies them at random, fires,
-and prints once per second what each one sees: entity count, ping, lives and score.
+and prints once per second what each one sees: entity count, ping, lives, score, level, wave,
+phase and boss health. `-b smart` makes them aim at enemies, dodge shots and catch the
+Summoner's Cup (they can finish the story on easy); `-m endless` picks the mode when they start
+the game.
 
 The ping includes up to one tick of waiting on the server side: PONG is sent by the game loop
 when it drains the queue, not by the network thread. On loopback the bot therefore shows about

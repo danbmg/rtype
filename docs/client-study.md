@@ -1,6 +1,6 @@
 # Graphics and audio choices
 
-The Part 1 client needs a window, 2D sprites, text, keyboard input and short sound effects.
+The client needs a window, 2D sprites, text, keyboard input and short sound effects.
 It does not need a scene editor, a 3D renderer or a physics library.
 
 | Candidate | Relevant properties | Decision for this project |
