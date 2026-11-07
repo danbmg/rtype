@@ -123,33 +123,3 @@ python3 -m venv .venv
 
 To add a page, create it in `docs/` and add it to `nav:` in `mkdocs.yml`; the strict build fails
 on a page missing from the menu.
-
-## Continuous integration
-
-Two GitHub Actions workflows run on every pull request to `main` or `dev` and on every push to
-`main`:
-
-| Workflow | What it does |
-| --- | --- |
-| `CI` (`.github/workflows/ci.yml`) | Builds in Release with warnings as errors, runs every test, checks that `r-type_server` and `r-type_client` are at the repository root |
-| `Docs` (`.github/workflows/docs.yml`) | Builds this site with `mkdocs build --strict`, then publishes it to GitHub Pages from `main` |
-
-GitHub-hosted runners are not available to this repository, so the jobs run on team machines
-registered as **self-hosted runners**. A runner keeps the dependency sources in
-`~/.cache/CPM` between runs, so nothing is downloaded again unless a pinned version changes.
-
-Register a Linux runner (an Ubuntu machine with the packages from [Requirements](#requirements);
-Ninja is not needed):
-
-1. On GitHub: **Settings > Actions > Runners > New self-hosted runner**, choose Linux x64.
-2. Run the download and `./config.sh --url … --token …` commands shown on that page, in a folder
-   of your home directory (for example `~/actions-runner`), and accept the default labels.
-3. Start it: `./run.sh` while you work, or `sudo ./svc.sh install && sudo ./svc.sh start` to
-   start it with the machine.
-
-The `Windows` job of the CI is skipped until a Windows runner exists: register one the same way
-on a machine with Visual Studio 2022 and CMake, then set the repository variable
-`WINDOWS_RUNNER` to `true` (**Settings > Secrets and variables > Actions > Variables**).
-
-A runner executes whatever a workflow of this repository asks for, with the rights of the user
-who started it: register it for this private repository only.
