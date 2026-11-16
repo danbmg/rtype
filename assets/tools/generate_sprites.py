@@ -195,77 +195,92 @@ def shade(colour, factor):
     return tuple(max(0, min(255, int(c * factor))) for c in colour[:3]) + (255,)
 
 
-def dragon_emblem(size, frame):
-    """Round badge with a dragon head facing the players; it breathes fire on frame 1."""
-    big = 100
-    badge = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(badge)
-    draw.ellipse((0, 0, big - 1, big - 1), fill=(25, 20, 30, 255))
-    # One bat wing raised behind the head, its bones running from the shoulder to each tip.
-    shoulder, tips = (60, 46), [(50, 10), (74, 6), (94, 26)]
-    draw.polygon([shoulder, tips[0], (62, 22), tips[1], (80, 26), tips[2], (86, 46)],
-                 fill=(120, 60, 150, 255))
+def dragon_wing(draw, shoulder, wrist, tips, root, membrane, bone):
+    """Bat wing: a membrane scalloped between finger tips, with bones from the wrist."""
+    outline = [shoulder, wrist]
+    for index, tip in enumerate(tips):
+        outline.append(tip)
+        after = tips[index + 1] if index + 1 < len(tips) else root
+        middle = ((tip[0] + after[0]) / 2, (tip[1] + after[1]) / 2)
+        outline.append((middle[0] + (wrist[0] - middle[0]) * 0.45,
+                        middle[1] + (wrist[1] - middle[1]) * 0.45))
+    outline.append(root)
+    draw.polygon(outline, fill=membrane)
+    draw.line(shoulder + wrist, fill=bone, width=10)
     for tip in tips:
-        draw.line(shoulder + tip, fill=(190, 140, 230, 255), width=3)
-    # Neck curving down behind the head, with spikes along its back.
-    draw.polygon([(46, 52), (64, 44), (90, 70), (72, 88)], fill=(185, 40, 45, 255))
-    for t in (0.3, 0.55, 0.8):
-        x, y = 64 + 26 * t, 44 + 26 * t
-        draw.polygon([(x - 4, y - 4), (x + 6, y - 10), (x + 4, y + 4)], fill=(240, 225, 185, 255))
-    # Long snout, lit top, open jaw.
-    draw.polygon([(6, 46), (26, 38), (44, 34), (58, 40), (62, 52), (52, 62), (34, 60), (14, 56)],
-                 fill=(220, 50, 50, 255))
-    draw.polygon([(6, 46), (26, 38), (44, 34), (40, 42), (10, 48)], fill=(250, 110, 90, 255))
-    draw.polygon([(6, 49), (36, 51), (14, 56)], fill=(50, 10, 15, 255))
-    # Two horns swept back, a glowing eye, fire in the jaw on frame 1.
-    for horn in ([(40, 36), (60, 12), (52, 39)], [(50, 39), (78, 30), (58, 45)]):
-        draw.polygon(horn, fill=(240, 225, 185, 255))
-    eye = (255, 245, 140) if frame else (255, 170, 50)
-    draw.polygon([(26, 42), (38, 38), (35, 45)], fill=eye + (255,))
-    if frame:
-        draw.polygon([(10, 50), (34, 51), (14, 54)], fill=(255, 190, 60, 255))
-        draw.polygon([(8, 50), (3, 44), (5, 51), (3, 58)], fill=(255, 140, 40, 255))
-    draw.ellipse((0, 0, big - 1, big - 1), outline=(190, 150, 60, 255), width=5)
-    return badge.resize((size, size), Image.LANCZOS)
+        draw.line(wrist + tip, fill=bone, width=5)
 
 
 def make_gatekeeper():
-    """Boss 1: an armoured gate guardian with a dragon emblem and two cannons."""
-    width, height = 120, 96
+    """Boss 1: an original winged dragon facing the players; it flaps and breathes fire."""
+    width, height, k = 120, 96, 4  # drawn 4 times larger, then scaled down for smooth edges
+    up = lambda points: [(x * k, y * k) for x, y in points]
+    scales, light, belly = (175, 35, 45), (225, 80, 70), (240, 175, 90)
+    horn, membrane, far = (240, 225, 185), (130, 30, 45), (85, 18, 32)
     frames = []
     for frame in range(2):
-        image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        image = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
-        hull = (70, 92, 120)
-        # Rear armour and fins.
-        draw.polygon([(60, 4), (118, 14), (118, 82), (60, 92)], fill=shade(hull, 0.6))
-        draw.polygon([(88, 0), (118, 6), (110, 20), (84, 16)], fill=shade(hull, 0.8))
-        draw.polygon([(88, 96), (118, 90), (110, 76), (84, 80)], fill=shade(hull, 0.8))
-        # Main body, lit from the top.
-        draw.polygon([(22, 20), (78, 8), (100, 30), (100, 66), (78, 88), (22, 76), (10, 48)],
-                     fill=shade(hull, 1.0))
-        draw.polygon([(22, 20), (78, 8), (100, 30), (60, 34), (16, 40)], fill=shade(hull, 1.35))
-        draw.polygon([(22, 76), (78, 88), (100, 66), (60, 62), (16, 56)], fill=shade(hull, 0.75))
-        # Cannons pointing at the players.
-        for y in (22, 66):
-            draw.rectangle((0, y, 30, y + 8), fill=shade((150, 150, 160), 0.9))
-            draw.rectangle((0, y, 30, y + 2), fill=shade((200, 200, 210), 1.0))
-            draw.rectangle((0, y, 4, y + 8), fill=(40, 40, 50, 255))
-        # Plates and rivets.
-        for x in range(30, 96, 12):
-            draw.line((x, 14 + (x - 30) // 6, x + 4, 82 - (x - 30) // 6), fill=shade(hull, 0.55))
-            draw.point((x + 2, 26), fill=(210, 220, 235, 255))
-            draw.point((x + 2, 70), fill=(210, 220, 235, 255))
-        # Teal vents that glow on the second frame.
-        vent = (60, 255, 220) if frame else (30, 140, 130)
-        for y in (38, 46, 54):
-            draw.rectangle((80, y, 96, y + 3), fill=vent + (255,))
-        # The dragon emblem, where the eye used to be.
-        image.alpha_composite(dragon_emblem(40, frame), (24, 28))
-        frames.append(image)
+        fill = lambda points, colour: draw.polygon(up(points), fill=colour + (255,))
+        # Wings raised on frame 0, swept back on frame 1: the far wing first, behind everything.
+        if frame == 0:
+            far_wing = ((54, 42), (44, 10), [(56, 1), (70, 0), (84, 6), (92, 20)], (74, 44))
+            near_wing = ((60, 44), (56, 6), [(72, 0), (92, 2), (108, 12), (116, 30)], (88, 48))
+        else:
+            far_wing = ((54, 44), (62, 22), [(72, 12), (84, 12), (94, 20), (100, 32)], (74, 48))
+            near_wing = ((60, 46), (72, 20), [(84, 10), (100, 12), (112, 22), (118, 38)],
+                         (86, 50))
+        shoulder, wrist, tips, root = far_wing
+        dragon_wing(draw, up([shoulder])[0], up([wrist])[0], up(tips), up([root])[0],
+                    far + (255,), shade(far, 1.6))
+        # Long tail stretched behind, curling up to a spade tip.
+        fill([(84, 48), (98, 49), (108, 47), (114, 41), (117, 44), (110, 53), (98, 57),
+              (86, 59)], scales)
+        fill([(111, 43), (116, 32), (119, 44)], horn)
+        # Legs tucked under the body, with pale claws.
+        for leg in ([(48, 58), (56, 58), (54, 70), (48, 74), (42, 72), (48, 68)],
+                    [(76, 58), (88, 58), (88, 70), (82, 76), (74, 74), (80, 68)]):
+            fill(leg, shade(scales, 0.8)[:3])
+            x, y = leg[4]
+            fill([(x, y - 2), (x - 5, y + 3), (x + 2, y + 1)], horn)
+        # Body, lit back, plated belly.
+        fill([(40, 46), (56, 40), (76, 42), (90, 48), (92, 56), (84, 64), (64, 66), (46, 62),
+              (38, 54)], scales)
+        fill([(40, 46), (56, 40), (76, 42), (90, 48), (70, 47), (50, 49)], light)
+        fill([(38, 54), (46, 61), (64, 65), (82, 63), (66, 58), (48, 56)], belly)
+        for x in (48, 56, 64, 72):
+            draw.line(up([(x, 57 + (x - 48) // 12), (x - 2, 63)]), fill=shade(belly, 0.7),
+                      width=4)
+        # Neck rising to the head.
+        fill([(42, 52), (36, 42), (30, 34), (26, 28), (34, 26), (42, 32), (50, 40), (56, 46)],
+             scales)
+        fill([(36, 42), (30, 34), (26, 28), (34, 26), (40, 32), (40, 38)], light)
+        # Spikes along the neck and the back.
+        for x, y in ((34, 28), (40, 33), (46, 38), (56, 40), (66, 40), (76, 42), (86, 46)):
+            fill([(x - 3, y + 1), (x + 1, y - 6), (x + 4, y + 1)], horn)
+        # Head: long snout, open jaw, horns swept back, a glowing eye.
+        fill([(4, 32), (14, 26), (26, 22), (34, 26), (36, 34), (30, 38), (18, 39), (8, 37)],
+             scales)
+        fill([(4, 32), (14, 26), (26, 22), (24, 28), (8, 32)], light)
+        mouth = (255, 200, 80) if frame else (255, 130, 40)
+        fill([(4, 34), (24, 35), (8, 38)], mouth)
+        for spike in ([(26, 23), (42, 8), (32, 26)], [(30, 27), (48, 18), (35, 31)]):
+            fill(spike, horn)
+        fill([(17, 27), (24, 25), (22, 29)], (255, 240, 120) if frame else (255, 200, 60))
+        if frame:  # a breath of fire towards the players
+            fill([(5, 35), (0, 30), (2, 35), (0, 40)], (255, 150, 40))
+        # Near wing last, over the body.
+        shoulder, wrist, tips, root = near_wing
+        dragon_wing(draw, up([shoulder])[0], up([wrist])[0], up(tips), up([root])[0],
+                    membrane + (255,), light + (255,))
+        frames.append(image.resize((width, height), Image.LANCZOS))
+    # Centre the dragon vertically in its hitbox, the same shift for both frames.
+    boxes = [image.getbbox() for image in frames]
+    top, bottom = min(box[1] for box in boxes), max(box[3] for box in boxes)
+    shift = (height - (bottom - top)) // 2 - top
     sheet = Image.new("RGBA", (width * 2, height), (0, 0, 0, 0))
     for index, image in enumerate(frames):
-        sheet.alpha_composite(image, (index * width, 0))
+        sheet.alpha_composite(image, (index * width, shift))
     sheet.save(ASSETS / "boss_gatekeeper.png")
 
 
