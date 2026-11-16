@@ -50,8 +50,9 @@ and previous page.
   emblem of the same colour, and each also carries a `P1`–`P4` label above it; the HUD marks your
   own slot with `YOU`. Red and green, the pair that colour-blind players confuse most, are
   always told apart by their label.
-- **Power-ups do not depend on colour:** each capsule shows a letter (`1`, `+`, `R`, `D`, `S`,
-  `H`, `O`), and the HUD writes the weapon in full ("SPREAD", "SHIELD").
+- **Power-ups do not depend on colour:** each capsule shows a white symbol (heart, cross,
+  lightning bolt, two shots, three shots in a fan, big shot, shield), and the HUD writes the
+  weapon in full ("SPREAD", "SHIELD").
 - **Larger text:** in the menu (TEXT SIZE) or F1 in game: the menu, the HUD, the title cards and
   the footer grow.
 - **Scalable window:** the whole game scales with the window, keeping its proportions, and pixel

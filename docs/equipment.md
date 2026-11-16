@@ -82,6 +82,6 @@ fields of `PlayerState`. Protocol **3** adds the Shield (12) and Trophy (13) kin
 byte (shield up, invulnerable), so `PlayerState` is 11 bytes. Normal entity packets replicate
 item positions and removals. See the [protocol RFC](protocol/rfc.md).
 
-The graphical client draws each item as a capsule with a letter (`assets/pickups.png`), the
+The graphical client draws each item as a capsule with a symbol (`assets/pickups.png`), the
 Cup with a glow and a "catch the Cup" label, a bubble around shielded ships and a blinking ship
 while invulnerable. Its HUD shows the weapon, the shield and a rapid-fire bar per player.

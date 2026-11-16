@@ -6,7 +6,7 @@ committed, so neither building nor playing needs Python.
     python3 assets/tools/generate_sprites.py
 
 Inputs (in assets/): r-typesheet42.gif (supplied R-Type ships), source/T1.png (team emblem),
-source/world_cup.png (Worlds trophy logo), DejaVuSans.ttf.
+source/world_cup.png (Worlds trophy logo).
 Outputs (in assets/): ships.png, t1.png, trophy.png, trophy_big.png, pickups.png,
 boss_gatekeeper.png, boss_final.png, boss_shot.png, shield.png, planets.png.
 The two bosses, the pickups and the planets are original art drawn by this script.
@@ -17,7 +17,7 @@ import math
 import random
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
 ASSETS = Path(__file__).resolve().parent.parent
 
@@ -138,28 +138,56 @@ def make_trophy():
     square.resize((48, 48), Image.LANCZOS).save(ASSETS / "trophy.png")
 
 
+def pickup_symbol(draw, kind):
+    """White symbol of a bonus, drawn on a 96 x 96 canvas."""
+    if kind == "life":  # a heart
+        draw.ellipse((22, 26, 50, 54), fill=255)
+        draw.ellipse((46, 26, 74, 54), fill=255)
+        draw.polygon([(24, 46), (72, 46), (48, 74)], fill=255)
+    elif kind == "heal":  # a medical cross
+        draw.rectangle((39, 22, 57, 74), fill=255)
+        draw.rectangle((22, 39, 74, 57), fill=255)
+    elif kind == "rapid":  # a lightning bolt
+        draw.polygon([(56, 16), (28, 54), (46, 54), (38, 80), (68, 40), (50, 40), (60, 16)],
+                     fill=255)
+    elif kind == "double":  # two parallel shots
+        for y in (30, 54):
+            draw.rounded_rectangle((20, y, 76, y + 12), radius=6, fill=255)
+    elif kind == "spread":  # three separate shots in a fan
+        for line in ((40, 36, 70, 20), (42, 48, 76, 48), (40, 60, 70, 76)):
+            draw.line(line, fill=255, width=11)
+        draw.ellipse((18, 42, 30, 54), fill=255)
+    elif kind == "heavy":  # one big round shot with speed lines
+        draw.ellipse((38, 26, 78, 66), fill=255)
+        draw.rectangle((16, 36, 32, 42), fill=255)
+        draw.rectangle((16, 50, 32, 56), fill=255)
+    elif kind == "shield":  # a shield
+        draw.polygon([(48, 18), (74, 28), (70, 54), (48, 78), (26, 54), (22, 28)], fill=255)
+
+
 def make_pickups():
-    """Capsules with a letter: the bonus is told by its letter, not only by its colour."""
-    font = ImageFont.truetype(str(ASSETS / "DejaVuSans.ttf"), 15)
-    icons = [  # extra life, heal, rapid fire, double, spread, heavy, shield
-        ("1", (255, 110, 180)), ("+", (70, 210, 90)), ("R", (255, 150, 40)),
-        ("D", (40, 200, 230)), ("S", (170, 100, 255)), ("H", (230, 60, 60)),
-        ("O", (90, 160, 255)),
+    """Capsules with a symbol: the bonus is told by its shape, not only by its colour."""
+    icons = [  # in PickupType order
+        ("life", (255, 110, 180)), ("heal", (70, 210, 90)), ("rapid", (255, 150, 40)),
+        ("double", (40, 200, 230)), ("spread", (170, 100, 255)), ("heavy", (230, 60, 60)),
+        ("shield", (90, 160, 255)),
     ]
-    size = 24
+    size, big = 24, 96  # drawn 4 times larger, then scaled down for smooth edges
     sheet = Image.new("RGBA", (size * len(icons), size), (0, 0, 0, 0))
-    for index, (letter, colour) in enumerate(icons):
-        icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    for index, (kind, colour) in enumerate(icons):
+        icon = Image.new("RGBA", (big, big), (0, 0, 0, 0))
         draw = ImageDraw.Draw(icon)
         dark = tuple(max(0, c // 3) for c in colour)
-        draw.ellipse((0, 0, size - 1, size - 1), fill=dark + (255,))
-        draw.ellipse((2, 2, size - 3, size - 3), fill=colour + (255,))
-        shine = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        ImageDraw.Draw(shine).ellipse((6, 3, size - 10, 8), fill=(255, 255, 255, 120))
+        draw.ellipse((0, 0, big - 1, big - 1), fill=dark + (255,))
+        draw.ellipse((8, 8, big - 9, big - 9), fill=colour + (255,))
+        shine = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+        ImageDraw.Draw(shine).ellipse((24, 12, 56, 32), fill=(255, 255, 255, 120))
         icon.alpha_composite(shine)
-        draw.text((size / 2, size / 2 + 1), letter, font=font, fill=(255, 255, 255, 255),
-                  anchor="mm", stroke_width=1, stroke_fill=dark + (255,))
-        sheet.alpha_composite(icon, (index * size, 0))
+        symbol = Image.new("L", (big, big))
+        pickup_symbol(ImageDraw.Draw(symbol), kind)
+        icon.paste(dark + (255,), mask=symbol.filter(ImageFilter.MaxFilter(9)))
+        icon.paste((255, 255, 255, 255), mask=symbol)
+        sheet.alpha_composite(icon.resize((size, size), Image.LANCZOS), (index * size, 0))
     sheet.save(ASSETS / "pickups.png")
 
 
@@ -167,8 +195,42 @@ def shade(colour, factor):
     return tuple(max(0, min(255, int(c * factor))) for c in colour[:3]) + (255,)
 
 
+def dragon_emblem(size, frame):
+    """Round badge with a dragon head facing the players; it breathes fire on frame 1."""
+    big = 100
+    badge = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(badge)
+    draw.ellipse((0, 0, big - 1, big - 1), fill=(25, 20, 30, 255))
+    # One bat wing raised behind the head, its bones running from the shoulder to each tip.
+    shoulder, tips = (60, 46), [(50, 10), (74, 6), (94, 26)]
+    draw.polygon([shoulder, tips[0], (62, 22), tips[1], (80, 26), tips[2], (86, 46)],
+                 fill=(120, 60, 150, 255))
+    for tip in tips:
+        draw.line(shoulder + tip, fill=(190, 140, 230, 255), width=3)
+    # Neck curving down behind the head, with spikes along its back.
+    draw.polygon([(46, 52), (64, 44), (90, 70), (72, 88)], fill=(185, 40, 45, 255))
+    for t in (0.3, 0.55, 0.8):
+        x, y = 64 + 26 * t, 44 + 26 * t
+        draw.polygon([(x - 4, y - 4), (x + 6, y - 10), (x + 4, y + 4)], fill=(240, 225, 185, 255))
+    # Long snout, lit top, open jaw.
+    draw.polygon([(6, 46), (26, 38), (44, 34), (58, 40), (62, 52), (52, 62), (34, 60), (14, 56)],
+                 fill=(220, 50, 50, 255))
+    draw.polygon([(6, 46), (26, 38), (44, 34), (40, 42), (10, 48)], fill=(250, 110, 90, 255))
+    draw.polygon([(6, 49), (36, 51), (14, 56)], fill=(50, 10, 15, 255))
+    # Two horns swept back, a glowing eye, fire in the jaw on frame 1.
+    for horn in ([(40, 36), (60, 12), (52, 39)], [(50, 39), (78, 30), (58, 45)]):
+        draw.polygon(horn, fill=(240, 225, 185, 255))
+    eye = (255, 245, 140) if frame else (255, 170, 50)
+    draw.polygon([(26, 42), (38, 38), (35, 45)], fill=eye + (255,))
+    if frame:
+        draw.polygon([(10, 50), (34, 51), (14, 54)], fill=(255, 190, 60, 255))
+        draw.polygon([(8, 50), (3, 44), (5, 51), (3, 58)], fill=(255, 140, 40, 255))
+    draw.ellipse((0, 0, big - 1, big - 1), outline=(190, 150, 60, 255), width=5)
+    return badge.resize((size, size), Image.LANCZOS)
+
+
 def make_gatekeeper():
-    """Boss 1: an armoured gate guardian with a single red eye and two cannons."""
+    """Boss 1: an armoured gate guardian with a dragon emblem and two cannons."""
     width, height = 120, 96
     frames = []
     for frame in range(2):
@@ -198,13 +260,8 @@ def make_gatekeeper():
         vent = (60, 255, 220) if frame else (30, 140, 130)
         for y in (38, 46, 54):
             draw.rectangle((80, y, 96, y + 3), fill=vent + (255,))
-        # The eye: dark socket, red iris, a pupil that looks around.
-        draw.ellipse((26, 30, 62, 66), fill=(25, 20, 30, 255))
-        iris = (255, 60, 50) if frame else (210, 30, 40)
-        draw.ellipse((31, 35, 57, 61), fill=iris + (255,))
-        pupil_x = 37 if frame else 40
-        draw.ellipse((pupil_x, 42, pupil_x + 10, 54), fill=(255, 230, 120, 255))
-        draw.ellipse((33, 37, 41, 43), fill=(255, 200, 200, 200))
+        # The dragon emblem, where the eye used to be.
+        image.alpha_composite(dragon_emblem(40, frame), (24, 28))
         frames.append(image)
     sheet = Image.new("RGBA", (width * 2, height), (0, 0, 0, 0))
     for index, image in enumerate(frames):

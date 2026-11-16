@@ -95,18 +95,18 @@ shake (which can be turned off).
 
 ## Power-ups
 
-Enemies may drop a capsule when they die (bosses always do). Each capsule shows a **letter**, so
+Enemies may drop a capsule when they die (bosses always do). Each capsule shows a **symbol**, so
 it can be told apart without colour.
 
-| Capsule | Letter | Effect |
+| Capsule | Symbol | Effect |
 | --- | --- | --- |
-| Extra life | 1 | +1 life (up to 9) |
-| Heal | + | health back to full |
-| Rapid fire | R | shoots 2.5 times faster for 8 s |
-| Double | D | two parallel shots |
-| Spread | S | three shots in a fan |
-| Heavy | H | slower, 3 damage per shot |
-| Shield | O | absorbs the next hit (12 s at most) |
+| Extra life | heart | +1 life (up to 9) |
+| Heal | cross | health back to full |
+| Rapid fire | lightning bolt | shoots 2.5 times faster for 8 s |
+| Double | two parallel shots | two parallel shots |
+| Spread | three shots in a fan | three shots in a fan |
+| Heavy | one big shot | slower, 3 damage per shot |
+| Shield | shield | absorbs the next hit (12 s at most) |
 | The Cup | (trophy) | wins the story, +10000 points |
 
 Weapons last until the ship loses a life. A ship that loses a life is invulnerable for 2
