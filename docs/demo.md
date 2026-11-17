@@ -43,3 +43,9 @@ cmake --build build -j
 ```
 
 Up to 4 players. A client on another commit is rejected (different protocol version).
+
+
+To open the Mkdocs :
+
+python3 -m venv .venv && .venv/bin/pip install -r docs/requirements.txt
+.venv/bin/mkdocs serve
