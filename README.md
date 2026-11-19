@@ -1,5 +1,7 @@
 # R-Type: Save the Summoner's Cup
 
+> 🎓 Epitech project (3rd year, Epitech Nice, 2026), built as a team.
+
 A networked R-Type-style shoot-'em-up for 1 to 4 players, built with a C++20 game engine. The
 Summoner's Cup was stolen at the Worlds final: four T1 fighters (red, blue, green, yellow) chase
 the Bydos across 10 levels and two bosses to bring it home, or fight endless waves for the high
