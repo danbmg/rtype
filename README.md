@@ -88,12 +88,13 @@ controls (any key can be bound to any action) and the accessibility options.
 | Client option | Effect |
 | --- | --- |
 | `-h host`, `-p port` | server address (default 127.0.0.1:4242) |
-| `--mode story\|endless`, `--difficulty easy\|normal\|hard` | preselect the menu |
+| `--mode story\|endless`, `--difficulty easy\|normal\|hard\|tutorial` | preselect the menu (`tutorial`: story only, no game over, F3 skips a level) |
 | `--join` | skip the menu and join at once |
 | `--assets dir`, `--mute` | asset directory, start silent |
 
 In game: the bound keys move and fire (arrows and Space by default), F2 toggles auto-fire,
-M mutes, + and − change the volume, F1 enlarges the text, Escape goes back to the menu.
+M mutes, + and − change the volume, F1 enlarges the text, Enter continues once you are out,
+F3 skips the level (tutorial only), Escape goes back to the menu.
 
 Headless players, to test the server or to fill a game for a demo:
 
@@ -106,7 +107,7 @@ Headless players, to test the server or to fill a game for a demo:
 | | |
 | --- | --- |
 | Modes | **Story**: 10 levels, a boss at levels 5 and 10, catch the Summoner's Cup to win. **Endless**: generated rounds, harder each time |
-| Difficulty | easy (5 lives), normal (3), hard (2); scales enemy health, fire and speed |
+| Difficulty | easy (5 lives), normal (3), hard (2); scales enemy health, fire and speed. Tutorial (story only): no game over, F3 skips a level |
 | Enemies | drones, heavy drones, sine-wave wavers, zigzags, homing chargers, turrets, in formations |
 | Bosses | The Gatekeeper and The Cup Thief: original designs with health-based phases (aimed volleys, fans, rings, walls, summons) |
 | Power-ups | extra life, heal, rapid fire, double, spread and heavy weapons, shield |
